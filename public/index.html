@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="CatStreamApp - Il tuo cinema personale" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- 🔤 GOOGLE FONTS - Typography Friendly -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <title>CatStreamApp</title>
+    
+    <style>
+      /* Solo lo sfondo necessario per evitare flash bianco */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body, html {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        /* 🔤 NUOVA TYPOGRAPHY */
+        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        letter-spacing: -0.01em;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>È necessario abilitare JavaScript per eseguire questa app.</noscript>
+    
+    <!-- Solo il container React -->
+    <div id="root"></div>
+  </body>
+</html>

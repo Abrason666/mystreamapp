@@ -1,0 +1,222 @@
+/* ========================================
+   PLACEHOLDERIMAGE - CATSTREAM PLACEHOLDER
+   ======================================== */
+
+/* === BASE PLACEHOLDER === */
+.placeholder-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-cards);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  
+  /* Smooth transitions */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  
+  /* Subtle pattern background */
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(255, 107, 53, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(255, 140, 66, 0.1) 0%, transparent 50%);
+}
+
+.placeholder-image:hover {
+  border-color: var(--accent-primary);
+  background: var(--hover-bg);
+  transform: scale(1.02);
+}
+
+/* === PLACEHOLDER CONTENT === */
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  height: 100%;
+  width: 100%;
+}
+
+/* === CAT LOGO === */
+.cat-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+  transition: all 0.3s ease;
+}
+
+.placeholder-image:hover .cat-logo {
+  transform: scale(1.1);
+  filter: drop-shadow(0 6px 15px rgba(255, 107, 53, 0.4));
+}
+
+/* === TEXT STYLING === */
+.placeholder-title {
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-tight);
+  color: var(--text-primary);
+  margin: 1rem 0 0.5rem;
+  
+  /* Gradient text */
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  
+  text-shadow: none; /* Remove text shadow for gradient text */
+}
+
+.placeholder-subtitle {
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-normal);
+  color: var(--text-secondary);
+  margin: 0;
+  opacity: 0.8;
+  
+  /* Limit text length - UNIVERSALLY COMPATIBLE */
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === PLACEHOLDER TYPES === */
+
+/* Poster placeholder (vertical) */
+.placeholder-poster {
+  aspect-ratio: 2/3;
+  min-height: 300px;
+}
+
+.placeholder-poster .cat-logo {
+  width: 60px;
+  height: 60px;
+}
+
+.placeholder-poster .placeholder-title {
+  font-size: var(--font-size-base);
+}
+
+.placeholder-poster .placeholder-subtitle {
+  font-size: var(--font-size-xs);
+}
+
+/* Backdrop placeholder (horizontal) */
+.placeholder-backdrop {
+  aspect-ratio: 16/9;
+  min-height: 200px;
+}
+
+.placeholder-backdrop .cat-logo {
+  width: 80px;
+  height: 80px;
+}
+
+.placeholder-backdrop .placeholder-content {
+  flex-direction: row;
+  gap: 2rem;
+}
+
+.placeholder-backdrop .placeholder-text {
+  text-align: left;
+}
+
+/* Hero placeholder (large) */
+.placeholder-hero {
+  min-height: 400px;
+  background: linear-gradient(
+    135deg,
+    var(--bg-secondary) 0%,
+    var(--bg-cards) 50%,
+    var(--bg-secondary) 100%
+  );
+}
+
+.placeholder-hero .cat-logo {
+  width: 120px;
+  height: 120px;
+}
+
+.placeholder-hero .placeholder-title {
+  font-size: var(--font-size-4xl);
+  margin: 2rem 0 1rem;
+}
+
+.placeholder-hero .placeholder-subtitle {
+  font-size: var(--font-size-lg);
+  max-width: 300px;
+}
+
+/* === LOADING ANIMATION === */
+@keyframes placeholderPulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.placeholder-loading {
+  animation: placeholderPulse 2s infinite;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .placeholder-content {
+    padding: 1.5rem;
+  }
+  
+  .placeholder-poster .cat-logo {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .placeholder-poster .placeholder-title {
+    font-size: 0.9rem;
+  }
+  
+  .placeholder-backdrop .placeholder-content {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .placeholder-backdrop .placeholder-text {
+    text-align: center;
+  }
+  
+  .placeholder-hero .cat-logo {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .placeholder-hero .placeholder-title {
+    font-size: 1.5rem;
+  }
+  
+  .placeholder-hero .placeholder-subtitle {
+    font-size: 1rem;
+  }
+}
+
+/* === SPECIFIC CAROUSEL INTEGRATION === */
+.carousel-item .placeholder-image {
+  height: 100%;
+  border-radius: 15px;
+}
+
+.hero-section .placeholder-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}

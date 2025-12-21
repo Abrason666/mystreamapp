@@ -1,0 +1,45 @@
+/* ========================================
+   SMARTIMAGE - IMMAGINI CON FALLBACK
+   ======================================== */
+
+.smart-image-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.smart-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease;
+  border-radius: inherit;
+}
+
+.smart-image-hidden {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.smart-image-visible {
+  opacity: 1;
+  position: relative;
+}
+
+.smart-image-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.smart-image-placeholder {
+  width: 100%;
+  height: 100%;
+}

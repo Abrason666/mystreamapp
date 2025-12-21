@@ -1,0 +1,354 @@
+/* ========================================
+   MYSTREAMAPP v0.1.2 - DARK CINEMA THEME
+   ======================================== */
+
+@import './styles/buttons.css';
+
+/* === VARIABILI CSS PER PALETTE DARK-ORANGE === */
+:root {
+  --bg-primary: #0a0a0a;        /* Nero profondo */
+  --bg-secondary: #1a1a1a;      /* Grigio scurissimo */
+  --bg-cards: #2a2a2a;          /* Grigio scuro per cards */
+  --accent-primary: #ff6b35;    /* Arancione vivace */
+  --accent-secondary: #ff8c42;  /* Arancione chiaro */
+  --text-primary: #ffffff;      /* Bianco puro */
+  --text-secondary: #cccccc;    /* Grigio chiaro */
+  --text-muted: #999999;        /* Grigio spento */
+  --border-color: #333333;      /* Bordi sottili */
+  --hover-bg: rgba(255, 107, 53, 0.1);  /* Arancione trasparente */
+  --shadow-orange: rgba(255, 107, 53, 0.3);  /* Ombra arancione */
+  
+  /* 🔤 TYPOGRAPHY VARIABLES */
+  --font-family-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-family-display: 'Poppins', 'Inter', system-ui, sans-serif;
+  
+  /* Font Weights */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  
+  /* Font Sizes - Mobile First Approach */
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.875rem;     /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;     /* 18px */
+  --font-size-xl: 1.25rem;      /* 20px */
+  --font-size-2xl: 1.5rem;      /* 24px */
+  --font-size-3xl: 1.875rem;    /* 30px */
+  --font-size-4xl: 2.25rem;     /* 36px */
+  --font-size-5xl: 3rem;        /* 48px */
+  
+  /* Line Heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Letter Spacing */
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: -0.01em;
+  --letter-spacing-wide: 0.025em;
+}
+
+/* === RESET E BASE === */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary);
+  font-family: var(--font-family-primary);
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  background: var(--bg-primary);
+  min-height: 100vh;
+}
+
+/* === APP CONTAINER === */
+.App {
+  background: var(--bg-primary);
+  min-height: 100vh;
+  color: var(--text-primary);
+}
+
+/* === HEADER === */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  height: 80px;
+  
+  /* Ombra arancione sottile */
+  box-shadow: 0 2px 10px rgba(255, 107, 53, 0.1);
+}
+
+/* 🔧 LOGO SECTION NELL'HEADER */
+.app-logo-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.app-logo {
+  width: 80px;
+  height: auto; /* 👈 MANTIENE PROPORZIONI NATURALI */
+  object-fit: contain; /* 👈 PREVIENE DISTORSIONI */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.app-logo:hover {
+  transform: scale(1.15); /* 👈 SOLO SCALA, NESSUNA ROTAZIONE */
+  filter: brightness(1.2) drop-shadow(0 0 15px rgba(255, 107, 53, 0.5));
+}
+
+.app-header h1 {
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-tight);
+  color: var(--text-primary);
+  text-shadow: 0 0 20px var(--shadow-orange);
+  
+  /* Gradiente arancione sul testo */
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* === NAVIGATION === */
+.app-header nav {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.app-header nav a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 25px;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  font-family: var(--font-family-primary);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
+  letter-spacing: var(--letter-spacing-normal);
+  position: relative;
+}
+
+.app-header nav a:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px var(--shadow-orange);
+}
+
+/* Pulsante chiusura app */
+.close-app-btn {
+  background: var(--bg-cards);
+  color: var(--text-secondary);
+  border: 2px solid var(--border-color);
+  padding: 0.5rem 0.8rem;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1.2rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-app-btn:hover {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px var(--shadow-orange);
+}
+
+/* === MAIN CONTENT === */
+.app-main {
+  padding-top: 80px; /* Spazio per header fisso */
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  background: var(--bg-primary);
+}
+
+/* === HOMEPAGE === */
+.homepage {
+  width: 100%;
+  padding: 0;
+  background: var(--bg-primary);
+}
+
+/* === HERO SECTION === */
+.hero-section {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  background: var(--bg-primary);
+  position: relative;
+}
+
+/* === SEARCH PAGE === */
+.search-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--bg-primary);
+}
+
+/* === PLAYER PAGE === */
+.player-page {
+  padding: 0;
+  margin: 0;
+  width: 100vw;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+}
+
+/* Header in modalità player */
+.player-mode .app-header {
+  position: absolute;
+  z-index: 2000;
+  background: rgba(10, 10, 10, 0.9);
+  backdrop-filter: blur(15px);
+}
+
+/* Player fullscreen */
+.player-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 3000;
+  background: var(--bg-primary);
+}
+
+/* === APP VERSION === */
+.app-version {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.7);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-family: var(--font-family-primary);
+  font-weight: 500;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  user-select: none;
+  cursor: default;
+}
+
+.app-version:hover {
+  background: rgba(255, 107, 53, 0.1);
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    height: auto;
+  }
+  
+  .app-logo-section {
+    gap: 0.5rem;
+  }
+  
+  .app-logo {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .app-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .app-main {
+    padding-top: 120px;
+  }
+  
+  .app-header nav {
+    gap: 1rem;
+  }
+  
+  .close-app-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+  
+  .app-version {
+    bottom: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+  }
+}
+
+/* === SCROLLBAR PERSONALIZZATA === */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-secondary);
+}
+
+/* === SELECTION COLOR === */
+::selection {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+::-moz-selection {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+}

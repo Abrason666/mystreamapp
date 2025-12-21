@@ -1,0 +1,204 @@
+/* ========================================
+   BOTTONI UNIFORMI - MYSTREAMAPP v0.1.2
+   ======================================== */
+
+/* === BASE BUTTON STYLES === */
+.btn {
+  /* Layout base */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  
+  /* Typography uniforme */
+  font-family: var(--font-family-primary);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-normal);
+  text-decoration: none;
+  text-align: center;
+  white-space: nowrap;
+  
+  /* Interactions */
+  cursor: pointer;
+  user-select: none;
+  border: none;
+  outline: none;
+  
+  /* Smooth transitions */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  
+  /* Prevent text blur */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === PRIMARY BUTTON (Riproduci) === */
+.btn-primary {
+  font-size: var(--font-size-base);
+  padding: 1.2rem 2.5rem;
+  border-radius: 12px;
+  
+  /* Sfondo solido - NO BLUR */
+  background: linear-gradient(135deg, var(--text-primary), #f0f0f0);
+  color: var(--bg-primary);
+  
+  /* Ombra sottile */
+  box-shadow: 0 4px 15px rgba(255, 255, 255, 0.3);
+  
+  /* Shimmer effect */
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -200px;
+  width: 200px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.4);
+  background: linear-gradient(135deg, #ffffff, var(--accent-secondary));
+}
+
+.btn-primary:active {
+  transform: translateY(-1px) scale(1.01);
+}
+
+/* === SECONDARY BUTTON (Aggiungi ai Preferiti) === */
+.btn-secondary {
+  font-size: var(--font-size-base);
+  padding: 1.2rem 2rem;
+  border-radius: 12px;
+  
+  /* Sfondo semitrasparente - NO BLUR DIETRO */
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  border: 2px solid var(--accent-primary);
+  
+  /* Ombra arancione */
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 107, 53, 0.2);
+  border-color: var(--accent-secondary);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 25px var(--shadow-orange);
+}
+
+.btn-secondary:active {
+  transform: translateY(-1px) scale(1.01);
+}
+
+/* === SECONDARY REMOVE (Rimuovi dai Preferiti) === */
+.btn-secondary.remove {
+  background: linear-gradient(135deg, var(--accent-primary), #e63946);
+  border-color: var(--accent-primary);
+  box-shadow: 0 4px 15px var(--shadow-orange);
+}
+
+.btn-secondary.remove:hover {
+  background: linear-gradient(135deg, #e63946, var(--accent-primary));
+  box-shadow: 0 8px 30px rgba(230, 57, 70, 0.5);
+}
+
+/* === TERTIARY BUTTON (Continue Watching) === */
+.btn-tertiary {
+  font-size: var(--font-size-base);
+  padding: 1.2rem 2rem;
+  border-radius: 12px;
+  
+  /* Rosso Netflix */
+  background: linear-gradient(135deg, #e50914, #f40612);
+  color: var(--text-primary);
+  border: 2px solid #e50914;
+  
+  /* Ombra rossa */
+  box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3);
+}
+
+.btn-tertiary:hover {
+  background: linear-gradient(135deg, #f40612, #e50914);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(229, 9, 20, 0.5);
+}
+
+.btn-tertiary:active {
+  transform: translateY(-1px) scale(1.01);
+}
+
+/* === BUTTON SIZES === */
+.btn-sm {
+  padding: 0.8rem 1.5rem;
+  font-size: var(--font-size-sm);
+}
+
+.btn-md {
+  padding: 1rem 2rem;
+  font-size: var(--font-size-base);
+}
+
+.btn-lg {
+  padding: 1.2rem 2.5rem;
+  font-size: var(--font-size-lg);
+}
+
+/* === BUTTON ICONS === */
+.btn-icon {
+  font-size: 1.2em;
+}
+
+.btn .btn-text {
+  /* Assicura che il testo sia sempre nitido */
+  text-rendering: optimizeLegibility;
+  font-smooth: always;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === EPISODE CARD BUTTONS (per TVShowDetail) === */
+.btn-episode {
+  padding: 0.5rem 1rem;
+  font-size: var(--font-size-sm);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-episode:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.btn-episode.watched {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-tertiary {
+    padding: 1rem 1.5rem;
+    font-size: var(--font-size-sm);
+  }
+  
+  .btn-lg {
+    padding: 1rem 2rem;
+    font-size: var(--font-size-base);
+  }
+}

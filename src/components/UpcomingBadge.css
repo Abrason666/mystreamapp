@@ -1,0 +1,109 @@
+/* ========================================
+   UPCOMING BADGE - BADGE "IN ARRIVO"
+   ======================================== */
+
+.upcoming-badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 15;
+  
+  /* Design badge */
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  padding: 0.4rem 0.9rem;
+  
+  /* Layout interno */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  
+  /* Effetti */
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.6);
+  backdrop-filter: blur(10px);
+  
+  /* Animazione */
+  animation: badgePulse 2s infinite;
+  
+  /* Testo */
+  font-family: var(--font-family-primary);
+  font-weight: var(--font-weight-bold);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  
+  /* Impedisci click accidentale */
+  pointer-events: none;
+  user-select: none;
+}
+
+.badge-icon {
+  font-size: 0.9rem;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+}
+
+.badge-text {
+  line-height: 1;
+}
+
+/* === ANIMAZIONI === */
+
+@keyframes badgePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.6);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.8);
+  }
+}
+
+/* Effetto glow al hover sulla card parent */
+.grid-item:hover .upcoming-badge,
+.carousel-item:hover .upcoming-badge {
+  animation: badgeGlow 1s infinite;
+}
+
+@keyframes badgeGlow {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.6);
+  }
+  50% {
+    box-shadow: 0 6px 25px rgba(255, 107, 53, 1),
+                0 0 40px rgba(255, 107, 53, 0.6);
+  }
+}
+
+/* === RESPONSIVE === */
+
+@media (max-width: 768px) {
+  .upcoming-badge {
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+    border-radius: 15px;
+  }
+  
+  .badge-icon {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .upcoming-badge {
+    top: 0.4rem;
+    left: 0.4rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.65rem;
+    gap: 0.3rem;
+  }
+  
+  .badge-icon {
+    font-size: 0.75rem;
+  }
+}

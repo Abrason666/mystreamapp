@@ -1,0 +1,117 @@
+/* ========================================
+   NETWORK ERROR - Gestione errori di connessione
+   ======================================== */
+
+/* === NETWORK ERROR FULL PAGE === */
+.network-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 3rem;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.network-error-content {
+  text-align: center;
+  max-width: 500px;
+}
+
+.network-error-icon {
+  font-size: 6rem;
+  margin-bottom: 1.5rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.network-error-title {
+  font-size: 2rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.network-error-message {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.network-error-retry {
+  font-size: 1.1rem;
+  padding: 1rem 2rem;
+  transition: all 0.3s ease;
+}
+
+.network-error-retry:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px var(--shadow-orange);
+}
+
+/* === NETWORK ERROR INLINE === */
+.network-error-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 107, 53, 0.1);
+  border: 2px solid var(--accent-primary);
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+
+.network-error-inline-icon {
+  font-size: 1.5rem;
+}
+
+.network-error-inline-text {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.network-error-inline-retry {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.network-error-inline-retry:hover {
+  background: var(--accent-secondary);
+  transform: translateY(-2px);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .network-error {
+    padding: 2rem 1.5rem;
+  }
+  
+  .network-error-icon {
+    font-size: 4rem;
+  }
+  
+  .network-error-title {
+    font-size: 1.5rem;
+  }
+  
+  .network-error-message {
+    font-size: 1rem;
+  }
+}
