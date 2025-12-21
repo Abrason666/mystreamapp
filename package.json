@@ -8,7 +8,7 @@
   "homepage": "./",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Abrason666/catstreamapp.git"
+    "url": "https://github.com/Abrason666/mystreamapp.git"
   },
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
@@ -66,7 +66,7 @@
       {
         "provider": "github",
         "owner": "Abrason666",
-        "repo": "catstreamapp"
+        "repo": "mystreamapp"
       }
     ],
     "files": [
