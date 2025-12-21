@@ -59,6 +59,8 @@
   "build": {
     "appId": "com.mystreamapp.app",
     "productName": "CatStreamApp",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+
     "directories": {
       "output": "dist"
     },
