@@ -213,11 +213,23 @@ function createWindow() {
 app.whenReady().then(() => {
   const window = createWindow();
   
+  // 🔍 DEBUG: Stampa variabili ambiente
+  log.info('🔍 DEBUG - Variabili ambiente:');
+  log.info('🔍 isDev:', isDev);
+  log.info('🔍 NODE_ENV:', process.env.NODE_ENV);
+  log.info('🔍 ELECTRON_IS_DEV:', process.env.ELECTRON_IS_DEV);
+  log.info('🔍 __dirname:', __dirname);
+  
   // ✅ ATTIVA AUTO-UPDATER (SOLO IN PRODUZIONE)
   if (!isDev) {
     log.info('🔄 Inizializzazione auto-updater...');
-    const { initAutoUpdater } = require('./autoUpdater');
-    initAutoUpdater(window);
+    try {
+      const { initAutoUpdater } = require('./autoUpdater');
+      initAutoUpdater(mainWindow);
+      log.info('✅ Auto-updater caricato con successo');
+    } catch (error) {
+      log.error('❌ Errore caricamento auto-updater:', error);
+    }
   } else {
     log.info('⚙️ Dev mode: auto-updater disabilitato');
   }
