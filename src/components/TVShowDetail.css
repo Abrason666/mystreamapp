@@ -187,12 +187,101 @@
   background: var(--accent-secondary);
 }
 
-/* === BOTTONI AZIONI === */
+/* === BOTTONI AZIONI - 🆕 OTTIMIZZATI === */
 .tv-actions {
   display: flex;
   gap: 1rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: stretch;
   animation: fadeInUp 1s cubic-bezier(0.4, 0.0, 0.2, 1) 0.6s both;
+}
+
+/* 🆕 BOTTONI PIÙ COMPATTI */
+.tv-actions .btn-lg {
+  padding: 1.5rem 2rem; /* Ridotto da 1.2rem 2.5rem */
+  font-size: 1rem; /* Ridotto da 1rem */
+  min-width: fit-content;
+}
+
+.tv-actions .btn-icon {
+  font-size: 1.5rem; /* Icone leggermente più piccole */
+}
+
+/* 🆕 TESTO BOTTONE - Layout Verticale Compatto */
+.tv-actions .btn .btn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.tv-actions .btn .btn-text div {
+  font-size: 1.2rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+.tv-actions .btn .btn-text small {
+  font-size: 0.85rem;
+  font-weight: var(--font-weight-normal);
+  opacity: 0.85;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+/* 🆕 BOTTONE PREFERITI - SOLO ICONA - RETTANGOLARE */
+.tv-actions .btn-favorite {
+  min-width: auto;
+  width: auto; /* Larghezza fissa - solo icona */
+  height: auto; /* 👈 AGGIUNTO: Altezza uguale alla larghezza */
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px; /* 👈 CAMBIATO: Da 50% (cerchio) a 12px (rettangolo arrotondato) */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  aspect-ratio: 1;
+}
+
+/* Preferiti - NON nei preferiti (cuore vuoto) */
+.tv-actions .btn-favorite:not(.remove) {
+  background: transparent;
+  border: 2px solid var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.tv-actions .btn-favorite:not(.remove):hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Preferiti - GIÀ nei preferiti (cuore spezzato con background) */
+.tv-actions .btn-favorite.remove {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  border: 2px solid #e74c3c;
+  color: white;
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+}
+
+.tv-actions .btn-favorite.remove:hover {
+  background: linear-gradient(135deg, #c0392b, #a93226);
+  border-color: #c0392b;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+}
+
+/* Icona cuore più grande */
+.tv-actions .btn-favorite .btn-icon {
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+/* Nascondi testo nel bottone preferiti */
+.tv-actions .btn-favorite .btn-text {
+  display: none;
 }
 
 /* ========================================
@@ -599,6 +688,12 @@
   .tv-actions .btn {
     width: 100%;
     justify-content: center;
+  }
+  
+  /* 🆕 Bottone preferiti su mobile - mantieni circolare */
+  .tv-actions .btn-favorite {
+    width: 60px;
+    align-self: center;
   }
   
   .season-selector-styled {

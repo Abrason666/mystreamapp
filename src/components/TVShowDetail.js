@@ -29,6 +29,9 @@ function TVShowDetail({ initialSeason }) {
   const [continueWatching, setContinueWatching] = useState(null);
   const [isFavoriteShow, setIsFavoriteShow] = useState(false);
   
+  // 🆕 NUOVO STATO: Episodio successivo
+  const [nextEpisode, setNextEpisode] = useState(null);
+  
   // 🆕 NUOVI STATI PER TAB
   const [activeTab, setActiveTab] = useState('episodes');
   const [cast, setCast] = useState([]);
@@ -97,6 +100,13 @@ function TVShowDetail({ initialSeason }) {
 
     loadShowData();
   }, [id, initialSeason]);
+
+  // 🆕 CALCOLA EPISODIO SUCCESSIVO quando cambiano continueWatching o seasons
+  useEffect(() => {
+    if (continueWatching && seasons.length > 0) {
+      calculateNextEpisode();
+    }
+  }, [continueWatching, seasons]);
 
   // 🆕 CARICA CAST E CREW
   const loadCredits = async (tvId) => {
@@ -193,6 +203,72 @@ function TVShowDetail({ initialSeason }) {
     // Carica "continua a guardare"
     const continueData = await storage.getContinueWatching(id);
     setContinueWatching(continueData);
+    
+    console.log('📊 Dati visione caricati:', {
+      episodiVisti: watched.length,
+      continuaAGuardare: continueData
+    });
+  };
+
+  // 🆕 FUNZIONE: CALCOLA EPISODIO SUCCESSIVO
+  const calculateNextEpisode = async () => {
+    if (!continueWatching || seasons.length === 0) {
+      setNextEpisode(null);
+      return;
+    }
+
+    const currentSeason = continueWatching.seasonNumber;
+    const currentEpisode = continueWatching.episodeNumber;
+
+    try {
+      // Carica episodi della stagione corrente
+      const currentSeasonEpisodes = await getSeasonEpisodes(id, currentSeason);
+      
+      // Caso 1: C'è un episodio successivo nella stessa stagione
+      if (currentEpisode < currentSeasonEpisodes.length) {
+        const nextEp = currentSeasonEpisodes[currentEpisode]; // Array è 0-indexed
+        setNextEpisode({
+          seasonNumber: currentSeason,
+          episodeNumber: currentEpisode + 1,
+          episodeTitle: nextEp.name,
+          exists: true
+        });
+        console.log('✅ Episodio successivo trovato:', `S${currentSeason}E${currentEpisode + 1} - ${nextEp.name}`);
+        return;
+      }
+
+      // Caso 2: Episodio corrente è l'ultimo della stagione
+      // Controlla se c'è una stagione successiva
+      const nextSeasonNumber = currentSeason + 1;
+      const nextSeasonExists = seasons.find(s => s.season_number === nextSeasonNumber);
+
+      if (nextSeasonExists) {
+        // C'è una stagione successiva, carica primo episodio
+        const nextSeasonEpisodes = await getSeasonEpisodes(id, nextSeasonNumber);
+        if (nextSeasonEpisodes.length > 0) {
+          const firstEp = nextSeasonEpisodes[0];
+          setNextEpisode({
+            seasonNumber: nextSeasonNumber,
+            episodeNumber: 1,
+            episodeTitle: firstEp.name,
+            exists: true
+          });
+          console.log('✅ Prima ep stagione successiva:', `S${nextSeasonNumber}E1 - ${firstEp.name}`);
+          return;
+        }
+      }
+
+      // Caso 3: Serie finita
+      setNextEpisode({
+        exists: false,
+        seriesCompleted: true
+      });
+      console.log('🏁 Serie completata! Nessun episodio successivo.');
+
+    } catch (error) {
+      console.error('❌ Errore calcolo episodio successivo:', error);
+      setNextEpisode(null);
+    }
   };
 
   const handleSeasonChange = async (seasonNumber) => {
@@ -205,11 +281,11 @@ function TVShowDetail({ initialSeason }) {
   };
 
   const playEpisode = (episode) => {
-    // Salva come "continua a guardare"
+    // Salva come "continua a guardare" con TITOLO VERO
     const continueData = {
       seasonNumber: selectedSeason,
       episodeNumber: episode.episode_number,
-      episodeTitle: episode.name,
+      episodeTitle: episode.name, // 🆕 TITOLO VERO!
       timestamp: Date.now()
     };
     storage.saveContinueWatching(id, continueData);
@@ -218,26 +294,56 @@ function TVShowDetail({ initialSeason }) {
     navigate(`/player/tv/${id}/${selectedSeason}/${episode.episode_number}`);
   };
 
-  const playFromBeginning = () => {
-    // Inizia dalla stagione 1, episodio 1
+  // 🆕 FUNZIONE: Riproduci dall'inizio (S1E1)
+  const playFromBeginning = async () => {
     const firstSeason = seasons.find(s => s.season_number === 1) || seasons[0];
     const seasonNumber = firstSeason.season_number;
     
     console.log('🎬 Iniziando serie dal primo episodio: S', seasonNumber, 'E1');
     
-    const continueData = {
-      seasonNumber: seasonNumber,
-      episodeNumber: 1,
-      episodeTitle: `Episodio 1`,
-      timestamp: Date.now()
-    };
-    storage.saveContinueWatching(id, continueData);
-    
-    navigate(`/player/tv/${id}/${seasonNumber}/1`);
+    // Carica episodi della prima stagione per ottenere titolo vero
+    try {
+      const firstSeasonEpisodes = await getSeasonEpisodes(id, seasonNumber);
+      const firstEpisode = firstSeasonEpisodes[0];
+      
+      const continueData = {
+        seasonNumber: seasonNumber,
+        episodeNumber: 1,
+        episodeTitle: firstEpisode.name, // 🆕 TITOLO VERO!
+        timestamp: Date.now()
+      };
+      storage.saveContinueWatching(id, continueData);
+      
+      navigate(`/player/tv/${id}/${seasonNumber}/1`);
+    } catch (error) {
+      console.error('❌ Errore caricamento primo episodio:', error);
+      // Fallback: usa titolo generico
+      const continueData = {
+        seasonNumber: seasonNumber,
+        episodeNumber: 1,
+        episodeTitle: 'Episodio 1',
+        timestamp: Date.now()
+      };
+      storage.saveContinueWatching(id, continueData);
+      navigate(`/player/tv/${id}/${seasonNumber}/1`);
+    }
   };
 
+  // 🆕 FUNZIONE: Continua a guardare
   const handleContinueWatching = () => {
     navigate(`/player/tv/${id}/${continueWatching.seasonNumber}/${continueWatching.episodeNumber}`);
+  };
+
+  // 🆕 FUNZIONE: Riproduci episodio successivo
+  const handlePlayNextEpisode = () => {
+    if (nextEpisode && nextEpisode.exists) {
+      navigate(`/player/tv/${id}/${nextEpisode.seasonNumber}/${nextEpisode.episodeNumber}`);
+    }
+  };
+
+  // 🆕 FUNZIONE: Riguarda dall'inizio
+  const handleRestartSeries = () => {
+    playFromBeginning();
   };
 
   const markAsWatched = (episode, e) => {
@@ -306,7 +412,7 @@ function TVShowDetail({ initialSeason }) {
     );
   }
 
-  // 👥 Trova il creatore della serie
+  // 💥 Trova il creatore della serie
   const creator = crew.find(member => member.job === 'Creator');
 
   return (
@@ -368,37 +474,74 @@ function TVShowDetail({ initialSeason }) {
               </div>
             )}
             
-            {/* Bottoni Azioni - IDENTICI A MOVIEDETAIL */}
+            {/* ========================================
+                🆕 BOTTONI AZIONI - LOGICA A 3 SCENARI
+                ======================================== */}
             <div className="tv-actions">
-              {continueWatching ? (
-                <button 
-                  className="btn btn-primary btn-lg"
-                  onClick={handleContinueWatching}
-                >
-                  <span className="btn-icon">▶️</span>
-                  <div className="btn-text">
-                    <div>Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}</div>
-                    <small style={{opacity: 0.8, fontSize: '0.9rem', fontWeight: 'normal'}}>
-                      {continueWatching.episodeTitle}
-                      {continueWatching.watchTime ? ` • ${Math.floor(continueWatching.watchTime / 60)}m guardati` : ''}
-                    </small>
-                  </div>
-                </button>
-              ) : (
+              
+              {/* SCENARIO 1: Mai visto nulla → Solo "Riproduci" */}
+              {!continueWatching && (
                 <button 
                   className="btn btn-primary btn-lg"
                   onClick={playFromBeginning}
                 >
                   <span className="btn-icon">▶️</span>
-                  <span className="btn-text">Riproduci</span>
+                      <div className="btn-text">
+                        <div>Riproduci</div>
+                      </div>
                 </button>
               )}
+
+              {/* SCENARIO 2 & 3: Sta guardando → "Continua" + altro bottone */}
+              {continueWatching && (
+                <>
+                  {/* Bottone "Continua" - SEMPRE presente se c'è continueWatching */}
+                  <button 
+                    className="btn btn-primary btn-lg"
+                    onClick={handleContinueWatching}
+                  >
+                    <span className="btn-icon">▶️</span>
+                    <div className="btn-text">
+                      <div>Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}</div>
+                    </div>
+                  </button>
+
+                  {/* SCENARIO 2: C'è episodio successivo → "Episodio Successivo" */}
+                  {nextEpisode && nextEpisode.exists && (
+                    <button 
+                      className="btn btn-secondary btn-lg"
+                      onClick={handlePlayNextEpisode}
+                    >
+                      <span className="btn-icon">⏭️</span>
+                      <div className="btn-text">
+                        <div>Episodio Successivo S{nextEpisode.seasonNumber}E{nextEpisode.episodeNumber}</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* SCENARIO 3: Serie finita → "Riguarda dall'Inizio" */}
+                  {nextEpisode && nextEpisode.seriesCompleted && (
+                    <button 
+                      className="btn btn-secondary btn-lg"
+                      onClick={handleRestartSeries}
+                    >
+                      <span className="btn-icon">🔄</span>
+                      <div className="btn-text">
+                        <div>Riguarda dall'Inizio</div>
+                      </div>
+                    </button>
+                  )}
+                </>
+              )}
               
+              {/* 🆕 Bottone Preferiti - SOLO ICONA */}
               <button 
-                className={`btn btn-secondary btn-lg ${isFavoriteShow ? 'remove' : ''}`}
+                className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteShow ? 'remove' : ''}`}
                 onClick={toggleFavorites}
+                title={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
+                aria-label={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavoriteShow ? '💔' : '➕'}</span>
+                <span className="btn-icon">{isFavoriteShow ? '💔' : '🤍'}</span>
                 <span className="btn-text">
                   {isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 </span>
@@ -485,7 +628,7 @@ function TVShowDetail({ initialSeason }) {
                     
                     // Aggiungi badge
                     if (isUpcoming) {
-                      label += ' 🔜 IN ARRIVO';
+                      label += ' 📅 IN ARRIVO';
                     } else if (isNew) {
                       label += '';
                     }
@@ -505,7 +648,7 @@ function TVShowDetail({ initialSeason }) {
                       <span className="season-badge season-badge-new">🆕 NUOVA</span>
                     )}
                     {isUpcomingSeason(seasons.find(s => s.season_number === selectedSeason).air_date) && (
-                      <span className="season-badge season-badge-upcoming">🔜 IN ARRIVO</span>
+                      <span className="season-badge season-badge-upcoming">📅 IN ARRIVO</span>
                     )}
                   </>
                 )}
