@@ -1,6 +1,6 @@
 {
   "name": "mystreamapp",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "App ad uso personale",
   "author": "Abrason",
   "private": true,
@@ -28,7 +28,8 @@
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
-    "electron-builder": "^24.6.0"
+    "electron-builder": "^24.6.0",
+    "electron-windows-sign": "^1.0.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -60,7 +61,6 @@
     "appId": "com.mystreamapp.app",
     "productName": "CatStreamApp",
     "artifactName": "${productName}-Setup-${version}.${ext}",
-
     "directories": {
       "output": "dist"
     },
@@ -83,7 +83,13 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico",
-      "publisherName": "Abrason"
+      "publisherName": "Abrason",
+      "certificateFile": "C:/AbrasonCert.pfx",
+      "certificatePassword": "CatStream2025!",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "signDlls": true
     },
     "linux": {
       "target": "AppImage",

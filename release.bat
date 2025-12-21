@@ -154,7 +154,7 @@ echo.
 echo [STEP 6/7] Verifica files generati...
 echo.
 
-set "INSTALLER_NAME=CatStreamApp Setup %NEW_VERSION%.exe"
+set "INSTALLER_NAME=CatStreamApp-Setup-%NEW_VERSION%.exe"
 set "INSTALLER_PATH=dist\%INSTALLER_NAME%"
 set "YML_PATH=dist\latest.yml"
 
@@ -192,6 +192,9 @@ echo [OK] latest.yml presente
 echo.
 echo [OK] Tutti i files generati correttamente!
 timeout /t 2 >nul
+
+REM Colori (funziona solo su Windows 10+)
+color 0A
 
 REM ============================================
 REM STEP 7: ISTRUZIONI FINALI
