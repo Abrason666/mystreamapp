@@ -1,12 +1,25 @@
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const log = require('electron-log');
+
+// ========================================
+// CONFIGURAZIONE LOGGING
+// ========================================
+log.transports.file.level = 'info';
+log.transports.console.level = 'info';
+log.info('📂 Log salvato in:', log.transports.file.getFile().path);
+log.info('🚀 Electron avviato');
+
+// ========================================
+// VARIABILI GLOBALI
+// ========================================
 const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_IS_DEV === 'true';
-
-// ✨ IMPORTA AUTO-UPDATER
-const { initAutoUpdater } = require('./autoUpdater');
-
 let mainWindow;
 
+// ========================================
+// AD-BLOCKER
+// ========================================
 const adBlockFilters = [
   '*://*/ads/*',
   '*://*/advertisements/*',
@@ -17,17 +30,12 @@ const adBlockFilters = [
   '*://*.googlesyndication.com/*'
 ];
 
-const fs = require('fs');
-
-// Path per salvare dati persistenti
+// ========================================
+// STORAGE PERSISTENTE
+// ========================================
 const userDataPath = app.getPath('userData');
 const dataFilePath = path.join(userDataPath, 'mystream-data.json');
 
-// Timing professionale
-const LOADING_DURATION = isDev ? 2000 : 2000;
-const FALLBACK_TIMEOUT = 8000;
-
-// Funzioni per salvare dati su file
 function saveDataToFile(key, value) {
   try {
     let data = {};
@@ -38,9 +46,9 @@ function saveDataToFile(key, value) {
     
     data[key] = value;
     fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
-    console.log(`💾 Dati salvati: ${key}`);
+    log.info(`💾 Dati salvati: ${key}`);
   } catch (error) {
-    console.error('❌ Errore salvataggio:', error);
+    log.error('❌ Errore salvataggio:', error);
   }
 }
 
@@ -52,16 +60,20 @@ function loadDataFromFile(key) {
       return data[key] || null;
     }
   } catch (error) {
-    console.error('❌ Errore caricamento:', error);
+    log.error('❌ Errore caricamento:', error);
   }
   return null;
 }
 
+// ========================================
+// CREAZIONE FINESTRA
+// ========================================
 function createWindow() {
   const ses = session.defaultSession;
   
+  // Abilita ad-blocker
   ses.webRequest.onBeforeRequest({ urls: adBlockFilters }, (details, callback) => {
-    console.log('🚫 Richiesta pubblicitaria bloccata:', details.url);
+    log.info('🚫 Pubblicità bloccata:', details.url);
     callback({ cancel: true });
   });
 
@@ -78,15 +90,15 @@ function createWindow() {
     },
     autoHideMenuBar: true,
     title: 'CatStreamApp v1.1.5',
-    show: false, // Inizialmente nascosta
+    show: false,
     fullscreenable: true,
-    backgroundColor: '#1e3c72', // Colore dell'app - NESSUN FLASH
-    icon: path.join(__dirname, 'images/logo512.png') // ✨ ICONA NELLA FINESTRA
+    backgroundColor: '#1e3c72',
+    icon: path.join(__dirname, 'images/logo512.png')
   });
 
-  const { ipcMain } = require('electron');
-
-  // Gestori IPC per salvare/caricare dati
+  // ========================================
+  // GESTORI IPC
+  // ========================================
   ipcMain.handle('save-data', async (event, key, value) => {
     saveDataToFile(key, value);
   });
@@ -96,38 +108,35 @@ function createWindow() {
   });
 
   ipcMain.handle('close-app', async () => {
-    console.log('🚪 Richiesta chiusura app dall\'utente');
+    log.info('🚪 Chiusura app richiesta');
     app.quit();
   });
 
-  // ✨ NUOVO: Handler per controllo manuale update
-  ipcMain.handle('check-for-updates', async () => {
-    const { checkForUpdatesManually } = require('./autoUpdater');
-    checkForUpdatesManually();
-  });
-
+  // Blocca nuove finestre
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: 'deny' };
   });
 
+  // ========================================
+  // CARICAMENTO CONTENUTO
+  // ========================================
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
+    log.info('🔧 Modalità sviluppo');
   } else {
     const express = require('express');
     const serverApp = express();
     const buildPath = path.join(__dirname, '../build');
     
-    console.log('📁 Build path:', buildPath);
+    log.info('📁 Build path:', buildPath);
     
-    // Serve file statici
     serverApp.use(express.static(buildPath));
     
-    // SPA fallback
     serverApp.use((req, res) => {
       res.sendFile(path.join(buildPath, 'index.html'), (err) => {
         if (err) {
-          console.log('❌ Errore:', err);
+          log.error('❌ Errore:', err);
           res.status(500).send('Errore');
         }
       });
@@ -136,42 +145,37 @@ function createWindow() {
     const server = serverApp.listen(0, () => {
       const port = server.address().port;
       const url = `http://localhost:${port}`;
-      console.log('🌐 Server su:', url);
+      log.info('🌐 Server locale:', url);
       
       mainWindow.loadURL(url);
     });
   }
 
-  // APPROCCIO SEMPLICE E EFFICACE - NESSUN SPLASH, SOLO ATTESA
+  // ========================================
+  // MOSTRA FINESTRA
+  // ========================================
   mainWindow.once('ready-to-show', () => {
-    console.log('⏳ App pronta, caricamento in corso...');
+    log.info('⏳ App pronta, caricamento...');
     
-    // Timer principale - professionale ma senza complicazioni
     setTimeout(() => {
-      console.log('✅ Caricamento completato, mostrando app');
-      
+      log.info('✅ Mostrando app');
       mainWindow.show();
       
-      // Assicurati che sia fullscreen
       setTimeout(() => {
         if (!mainWindow.isFullScreen()) {
           mainWindow.setFullScreen(true);
         }
-        console.log('🚀 CatStreamApp avviata con successo');
+        log.info('🚀 CatStreamApp avviata');
       }, 100);
       
-    }, LOADING_DURATION);
+    }, 2000);
   });
 
-  // Opzionale: mostra prima se completamente caricata
   mainWindow.webContents.once('did-finish-load', () => {
-    console.log('🎯 React completamente caricato');
-    
-    // Se vuoi, puoi ridurre il tempo qui
-    // Ma per sicurezza manteniamo il timer originale
+    log.info('🎯 React caricato');
   });
 
-  // Gestione tasti per fullscreen
+  // Gestione fullscreen
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.key === 'F11' && input.type === 'keyDown') {
       const isFullScreen = mainWindow.isFullScreen();
@@ -189,32 +193,33 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Fallback di sicurezza
+  // Fallback sicurezza
   setTimeout(() => {
     if (mainWindow && !mainWindow.isVisible()) {
-      console.log('⚠️ Fallback: mostrando app dopo timeout');
+      log.info('⚠️ Fallback: mostrando app');
       mainWindow.show();
       if (!mainWindow.isFullScreen()) {
         mainWindow.setFullScreen(true);
       }
     }
-  }, FALLBACK_TIMEOUT);
+  }, 8000);
+
+  return mainWindow;
 }
 
 // ========================================
 // APP LIFECYCLE
 // ========================================
-
 app.whenReady().then(() => {
-  createWindow();
+  const window = createWindow();
   
-  // ✨ ATTIVA AUTO-UPDATER dopo che la finestra è pronta
-  // Solo in produzione (non in sviluppo)
+  // ✅ ATTIVA AUTO-UPDATER (SOLO IN PRODUZIONE)
   if (!isDev) {
-    console.log('🔄 Inizializzazione auto-updater...');
-    initAutoUpdater(mainWindow);
+    log.info('🔄 Inizializzazione auto-updater...');
+    const { initAutoUpdater } = require('./autoUpdater');
+    initAutoUpdater(window);
   } else {
-    console.log('⚙️ Modalità sviluppo: auto-updater disabilitato');
+    log.info('⚙️ Dev mode: auto-updater disabilitato');
   }
 });
 
