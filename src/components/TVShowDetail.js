@@ -541,7 +541,7 @@ function TVShowDetail({ initialSeason }) {
                 title={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavoriteShow ? '💔' : '🤍'}</span>
+                <span className="btn-icon">{isFavoriteShow ? '🧡' : '🤍'}</span>
                 <span className="btn-text">
                   {isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 </span>
@@ -690,7 +690,7 @@ function TVShowDetail({ initialSeason }) {
                       text={episode.overview}
                       maxLength={120}
                       className="episode-overview"
-                      expandText="Continua a leggere"
+                      expandText="Leggi tutto"
                       collapseText="Riduci"
                     />
                     
