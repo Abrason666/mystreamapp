@@ -4,8 +4,8 @@ import { getMovieDetails, getBackdropUrl, getImageUrl } from '../services/tmdbAp
 import ExpandableText from './ExpandableText';
 import SmartImage from './SmartImage';
 import MovieCarousel from './MovieCarousel';
-import NetworkError from './NetworkError'; // 🆕 Gestione errori di rete
-import { isNetworkError } from '../utils/networkUtils'; // 🆕 Utility per controllare rete
+import NetworkError from './NetworkError';
+import { isNetworkError } from '../utils/networkUtils';
 import './MovieDetail.css';
 import storage from '../services/storage';
 import axios from 'axios';
@@ -28,28 +28,25 @@ function MovieDetail() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isFavoriteMovie, setIsFavoriteMovie] = useState(false);
-  const [networkError, setNetworkError] = useState(false); // 🆕 Traccia errori di rete
+  const [networkError, setNetworkError] = useState(false);
   
-  // 🆕 STATO ATTIVO PER LE TAB
   const [activeTab, setActiveTab] = useState('info');
 
   // 🔧 RESET DELLA TAB QUANDO CAMBIA IL FILM
   useEffect(() => {
     setActiveTab('info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [id]); // Si attiva ogni volta che l'ID cambia
+  }, [id]);
 
   useEffect(() => {
     const loadMovieData = async () => {
       setLoading(true);
-      setNetworkError(false); // Reset errore di rete
+      setNetworkError(false);
       
       try {
-        // 1. Carica dettagli base
         const details = await getMovieDetails(id);
         setMovieDetails(details);
         
-        // 2. Carica TUTTI i metadati aggiuntivi
         await Promise.all([
           loadCredits(id),
           loadVideos(id),
@@ -59,11 +56,9 @@ function MovieDetail() {
           loadReviews(id)
         ]);
         
-        // 3. Carica stato favoriti
         await loadFavoriteStatus();
       } catch (error) {
         console.error('❌ Errore caricamento film:', error);
-        // 🆕 Controlla se è un errore di rete
         if (isNetworkError(error)) {
           setNetworkError(true);
         }
@@ -75,14 +70,13 @@ function MovieDetail() {
     loadMovieData();
   }, [id]);
 
-  // 🎬 CARICA CAST E CREW
   const loadCredits = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/credits`, {
         params: { api_key: API_KEY, language: 'it-IT' }
       });
       
-      setCast(response.data.cast.slice(0, 20)); // Primi 20 attori
+      setCast(response.data.cast.slice(0, 20));
       setCrew(response.data.crew);
       
       console.log(`✅ Cast: ${response.data.cast.length} attori`);
@@ -91,14 +85,12 @@ function MovieDetail() {
     }
   };
 
-  // 🎥 CARICA VIDEO (Trailer)
   const loadVideos = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/videos`, {
         params: { api_key: API_KEY, language: 'it-IT' }
       });
       
-      // Ordina: Trailer ufficiali prima
       const sortedVideos = response.data.results.sort((a, b) => {
         if (a.type === 'Trailer' && b.type !== 'Trailer') return -1;
         if (a.type !== 'Trailer' && b.type === 'Trailer') return 1;
@@ -114,7 +106,6 @@ function MovieDetail() {
     }
   };
 
-  // 🏷️ CARICA KEYWORDS
   const loadKeywords = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/keywords`, {
@@ -128,14 +119,12 @@ function MovieDetail() {
     }
   };
 
-  // 🔞 CARICA CERTIFICAZIONE (R, PG-13, ecc.)
   const loadCertification = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/release_dates`, {
         params: { api_key: API_KEY }
       });
       
-      // Cerca certificazione USA o Italia
       const usRelease = response.data.results.find(r => r.iso_3166_1 === 'US');
       const itRelease = response.data.results.find(r => r.iso_3166_1 === 'IT');
       
@@ -150,28 +139,26 @@ function MovieDetail() {
     }
   };
 
-  // 🎬 CARICA RACCOMANDAZIONI
   const loadRecommendations = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/recommendations`, {
         params: { api_key: API_KEY, language: 'it-IT' }
       });
       
-      setRecommendations(response.data.results.slice(0, 12)); // Primi 12
+      setRecommendations(response.data.results.slice(0, 12));
       console.log(`✅ Raccomandazioni: ${response.data.results.length}`);
     } catch (error) {
       console.error('❌ Errore caricamento raccomandazioni:', error);
     }
   };
 
-  // ⭐ CARICA RECENSIONI
   const loadReviews = async (movieId) => {
     try {
       const response = await axios.get(`${BASE_URL}/movie/${movieId}/reviews`, {
         params: { api_key: API_KEY, language: 'en-US' }
       });
       
-      setReviews(response.data.results.slice(0, 10)); // Prime 10 recensioni
+      setReviews(response.data.results.slice(0, 10));
       console.log(`✅ Recensioni: ${response.data.results.length}`);
     } catch (error) {
       console.error('❌ Errore caricamento recensioni:', error);
@@ -208,19 +195,14 @@ function MovieDetail() {
     navigate(`/player/movie/${id}`);
   };
 
-  // 🆕 Funzione per riprovare il caricamento
   const handleRetry = () => {
-    window.location.reload(); // Ricarica la pagina per riprovare
+    window.location.reload();
   };
 
-  // 🔧 CORRETTO: Usa navigate invece di window.location.href
   const handleRecommendationClick = (movie) => {
-    // Naviga usando React Router per esperienza fluida
-    // Il reset della tab e lo scroll sono gestiti automaticamente dal useEffect sopra
     navigate(`/movie/${movie.id}`);
   };
 
-  // 🆕 FUNZIONI HELPER
   const getDirector = () => crew.find(p => p.job === 'Director');
   const getScreenwriter = () => crew.find(p => p.job === 'Screenplay');
   const getProducers = () => crew.filter(p => p.job === 'Producer').slice(0, 3);
@@ -234,12 +216,10 @@ function MovieDetail() {
     );
   }
 
-  // 🆕 Gestione errore di rete
   if (networkError) {
     return <NetworkError onRetry={handleRetry} />;
   }
 
-  // Errore generico: film non trovato
   if (!movieDetails) {
     return (
       <div className="movie-detail-error">
@@ -320,20 +300,26 @@ function MovieDetail() {
               </div>
             )}
             
-            {/* Bottoni Azioni */}
+            {/* ========================================
+                BOTTONI AZIONI - ALLINEATI A TVSHOW
+                ======================================== */}
             <div className="movie-actions">
               <button className="btn btn-primary btn-lg" onClick={playMovie}>
                 <span className="btn-icon">▶️</span>
-                <span className="btn-text">Riproduci</span>
+                <div className="btn-text">
+                  <div>Riproduci</div>
+                </div>
               </button>
               
               <button 
-                className={`btn btn-secondary btn-lg ${isFavoriteMovie ? 'remove' : ''}`}
+                className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteMovie ? 'remove' : ''}`}
                 onClick={toggleFavorites}
+                title={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
+                aria-label={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavoriteMovie ? '💔' : '➕'}</span>
+                <span className="btn-icon">{isFavoriteMovie ? '🧡' : '🤍'}</span>
                 <span className="btn-text">
-                  {isFavoriteMovie ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+                  {isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 </span>
               </button>
             </div>
@@ -445,8 +431,6 @@ function MovieDetail() {
                 </div>
               )}
               
-
-              
               {/* Lingue */}
               {movieDetails.spoken_languages?.length > 0 && (
                 <div className="info-card">
@@ -456,10 +440,6 @@ function MovieDetail() {
                   </p>
                 </div>
               )}
-
-              
-
-              
             </div>
           </div>
         )}
@@ -565,7 +545,6 @@ function MovieDetail() {
         )}
 
         {/* === SIMILAR MOVIES TAB === */}
-        {/* 🔧 CORRETTO: Usa MovieCarousel invece della griglia */}
         {activeTab === 'similar' && recommendations.length > 0 && (
           <div className="tab-panel tab-similar">
             <MovieCarousel 
