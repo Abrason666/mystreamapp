@@ -1,5 +1,5 @@
 /* ========================================
-   HEROSECTION v0.3.1 - FULLY RESPONSIVE + PAUSE BUTTON
+   HEROSECTION v0.4.0 - CON PULSANTE DETTAGLI
    ======================================== */
 
 /* === KEYFRAMES ANIMATIONS === */
@@ -133,8 +133,8 @@
   text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
   color: var(--text-secondary);
   
-  /* 🔧 SCROLL per descrizioni lunghe quando espanse */
-  max-height: 9rem; /* ~5 righe */
+  /* Scroll per descrizioni lunghe quando espanse */
+  max-height: 9rem;
   overflow-y: auto;
   padding-right: 0.5rem;
   
@@ -202,15 +202,65 @@
 /* === HERO ACTIONS === */
 .hero-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* 🔧 Tutti sulla stessa riga */
   gap: 1rem;
+  align-items: stretch;
   animation: fadeInUp 1s cubic-bezier(0.4, 0.0, 0.2, 1) 0.6s both;
 }
 
 .hero-actions .btn {
-  min-width: 140px;
-  padding: 1.2rem 2.5rem;
+  min-width: fit-content;
+  padding: 1rem 2rem;
   font-size: 1rem;
+}
+
+/* 🆕 BOTTONE PREFERITI - SOLO ICONA CUORE */
+.hero-actions .btn-favorite {
+  min-width: auto;
+  width: auto;
+  height: auto;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  aspect-ratio: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Preferiti - NON nei preferiti (cuore vuoto) */
+.hero-actions .btn-favorite:not(.remove) {
+  background: transparent;
+  border: 2px solid var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.hero-actions .btn-favorite:not(.remove):hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Preferiti - GIÀ nei preferiti (cuore spezzato con background rosso) */
+.hero-actions .btn-favorite.remove {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  border: 2px solid #e74c3c;
+  color: white;
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+}
+
+.hero-actions .btn-favorite.remove:hover {
+  background: linear-gradient(135deg, #c0392b, #a93226);
+  border-color: #c0392b;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+}
+
+/* Icona cuore più grande */
+.hero-actions .btn-favorite .btn-icon {
+  font-size: 1.8rem;
+  margin: 0;
 }
 
 /* === NAVIGATION CONTROLS === */
@@ -255,51 +305,40 @@
   transform: scale(1.05);
 }
 
-/* === 🆕 PAUSE/PLAY BUTTON === */
+/* === PAUSE/PLAY BUTTON === */
 .hero-pause-btn {
-  /* Posizione in basso a destra */
   position: absolute;
   bottom: 2rem;
   right: 2rem;
   
-  /* Stile bottone circolare */
   width: 50px;
   height: 50px;
   border-radius: 50%;
   
-  /* Colori in palette con l'app */
   background: rgba(42, 42, 42, 0.85);
   border: 2px solid rgba(255, 140, 66, 0.3);
   color: var(--text-secondary);
   
-  /* Effetto blur per eleganza */
   backdrop-filter: blur(10px);
   
-  /* Font e icona */
   font-size: 1rem;
   font-weight: bold;
   letter-spacing: -0.05em;
   
-  /* Interazione */
   cursor: pointer;
   z-index: 15;
   
-  /* Transizioni smooth */
   transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   
-  /* Ombra leggera */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   
-  /* Centra l'icona perfettamente */
   display: flex;
   align-items: center;
   justify-content: center;
   
-  /* Previeni selezione testo */
   user-select: none;
 }
 
-/* Hover: colore arancione vivace */
 .hero-pause-btn:hover {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
@@ -308,16 +347,44 @@
   box-shadow: 0 6px 18px rgba(255, 140, 66, 0.5);
 }
 
-/* Click: piccolo effetto di pressione */
 .hero-pause-btn:active {
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(255, 140, 66, 0.6);
 }
 
-/* Focus (accessibilità tastiera) */
 .hero-pause-btn:focus {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
+}
+
+/* === INDICATORS === */
+.hero-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  background: var(--bg-primary);
+}
+
+.hero-indicators .indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.hero-indicators .indicator:hover {
+  border-color: var(--accent-primary);
+  background: rgba(255, 140, 66, 0.3);
+}
+
+.hero-indicators .indicator.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  transform: scale(1.2);
 }
 
 /* === LOADING STATE === */
@@ -379,10 +446,24 @@
     font-size: 1.1rem;
   }
   
-  /* Bottone pausa su tablet */
   .hero-pause-btn {
     bottom: 1.5rem;
     right: 1.5rem;
+  }
+  
+  /* Pulsanti compatti su tablet */
+  .hero-actions .btn {
+    min-width: auto;
+    padding: 1rem 1.5rem;
+    font-size: 0.95rem;
+  }
+  
+  .hero-actions .btn-favorite {
+    padding: 0.9rem;
+  }
+  
+  .hero-actions .btn-favorite .btn-icon {
+    font-size: 1.6rem;
   }
 }
 
@@ -423,9 +504,18 @@
   }
   
   .hero-actions .btn {
-    min-width: 120px;
-    padding: 0.9rem 1.5rem;
-    font-size: 0.9rem;
+    min-width: auto;
+    padding: 0.9rem 1.2rem;
+    font-size: 0.85rem;
+  }
+  
+  /* Pulsante preferiti più piccolo su mobile */
+  .hero-actions .btn-favorite {
+    padding: 0.8rem;
+  }
+  
+  .hero-actions .btn-favorite .btn-icon {
+    font-size: 1.5rem;
   }
   
   .hero-navigation {
@@ -444,7 +534,6 @@
     min-height: 400px;
   }
   
-  /* Bottone pausa su mobile */
   .hero-pause-btn {
     bottom: 1rem;
     right: 1rem;
@@ -483,14 +572,35 @@
     align-items: flex-start;
   }
   
+  /* Su schermi piccoli, pulsanti compatti ma inline */
   .hero-actions {
-    flex-direction: column;
+    flex-wrap: nowrap;
     width: 100%;
+    gap: 0.5rem;
   }
   
   .hero-actions .btn {
-    width: 100%;
-    justify-content: center;
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+  }
+  
+  /* Nascondi testo sui pulsanti principali su schermi molto piccoli */
+  .hero-actions .btn .btn-text {
+    display: none;
+  }
+  
+  .hero-actions .btn .btn-icon {
+    margin: 0;
+    font-size: 1.3rem;
+  }
+  
+  /* Pulsante preferiti ancora più compatto */
+  .hero-actions .btn-favorite {
+    padding: 0.7rem;
+  }
+  
+  .hero-actions .btn-favorite .btn-icon {
+    font-size: 1.3rem;
   }
   
   /* Nascondi navigation su schermi molto piccoli */
@@ -503,7 +613,6 @@
     min-height: 350px;
   }
   
-  /* Bottone pausa leggermente più piccolo su mobile piccolo */
   .hero-pause-btn {
     bottom: 0.75rem;
     right: 0.75rem;
@@ -535,12 +644,25 @@
     max-height: 850px;
   }
   
-  /* Bottone pausa leggermente più grande su schermi grandi */
   .hero-pause-btn {
     width: 55px;
     height: 55px;
     font-size: 1.1rem;
     bottom: 2.5rem;
     right: 2.5rem;
+  }
+  
+  .hero-actions .btn {
+    min-width: fit-content;
+    padding: 1.2rem 2.5rem;
+    font-size: 1.1rem;
+  }
+  
+  .hero-actions .btn-favorite {
+    padding: 1.1rem;
+  }
+  
+  .hero-actions .btn-favorite .btn-icon {
+    font-size: 2rem;
   }
 }

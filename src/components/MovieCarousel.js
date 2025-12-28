@@ -270,7 +270,7 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
                         onClick={(e) => addToFavorites(item, e)}
                         title={isItemFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                       >
-                        {isItemFavorite ? '❤️' : '🤍'}
+                        {isItemFavorite ? '🧡' : '🤍'}
                       </button>
                     </div>
                   </div>
