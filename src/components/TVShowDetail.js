@@ -398,16 +398,31 @@ function TVShowDetail({ initialSeason }) {
     return (
       <div className="tv-detail-loading">
         <div className="loading-spinner"></div>
-        <p>Caricamento serie TV...</p>
+        <p>Caricamento dettagli serie TV...</p>
       </div>
     );
   }
 
-  if (!showDetails) {
+
+  // 🆕 MODIFICATO: Non mostrare errore se sta caricando o dati non pronti
+  if (!showDetails && !loading) {
     return (
       <div className="tv-detail-error">
         <h2>Serie TV non trovata</h2>
-        <button onClick={() => navigate(-1)}>← Torna Indietro</button>
+        <p>La serie TV che stai cercando non esiste o non è disponibile.</p>
+        <button onClick={() => navigate(-1)} className="btn btn-secondary">
+          ← Torna Indietro
+        </button>
+      </div>
+    );
+  }
+
+  // 🆕 Se showDetails è null ma non stiamo caricando, mostra loading
+  if (!showDetails) {
+    return (
+      <div className="tv-detail-loading">
+        <div className="loading-spinner"></div>
+        <p>Caricamento...</p>
       </div>
     );
   }

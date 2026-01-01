@@ -6,7 +6,8 @@ import VixSrcPlayer from './components/VixSrcPlayer';
 import HeroSection from './components/HeroSection';
 import MovieCarousel from './components/MovieCarousel';
 import TVShowDetail from './components/TVShowDetail';
-import MovieDetail from './components/MovieDetail'; // 👈 AGGIUNTO IMPORT
+import MovieDetail from './components/MovieDetail'; 
+import NavigationButtons from './components/NavigationButtons';
 import { getTrendingMovies, getTrendingTVShows, getPopularMovies, getPopularTVShows } from './services/tmdbApi';
 import './App.css';
 import storage from './services/storage';
@@ -30,17 +31,24 @@ function App() {
     <Router>
       <div className="App">
         <header className="app-header">
-          <div className="app-logo-section">
-            {/* 🔧 LOGO CLICCABILE PER TORNARE ALLA HOME */}
-            <a href="/" title="Torna alla Home">
-              <img 
-                src="/images/cat-logo.png" 
-                alt="CatStreamApp Logo" 
-                className="app-logo"
-              />
-            </a>
-            <h1>CatStreamApp</h1>
+          {/* 🆕 GRUPPO SINISTRA: Pulsanti Navigazione + Logo + Titolo */}
+          <div className="app-left-group">
+            <NavigationButtons />
+            
+            <div className="app-logo-section">
+              {/* 🔧 LOGO CLICCABILE PER TORNARE ALLA HOME */}
+              <a href="/" title="Torna alla Home">
+                <img 
+                  src="/images/cat-logo.png" 
+                  alt="CatStreamApp Logo" 
+                  className="app-logo"
+                />
+              </a>
+              <h1>CatStreamApp</h1>
+            </div>
           </div>
+          
+          {/* NAVIGATION TABS + CLOSE BUTTON */}
           <nav>
             <a href="/">Home</a>
             <a href="/categories">Categorie</a>

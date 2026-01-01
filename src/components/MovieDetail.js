@@ -207,7 +207,7 @@ function MovieDetail() {
   const getScreenwriter = () => crew.find(p => p.job === 'Screenplay');
   const getProducers = () => crew.filter(p => p.job === 'Producer').slice(0, 3);
 
-  if (loading) {
+ if (loading) {
     return (
       <div className="movie-detail-loading">
         <div className="loading-spinner"></div>
@@ -220,7 +220,7 @@ function MovieDetail() {
     return <NetworkError onRetry={handleRetry} />;
   }
 
-  if (!movieDetails) {
+  if (!movieDetails && !loading) {
     return (
       <div className="movie-detail-error">
         <h2>Film non trovato</h2>
@@ -228,6 +228,16 @@ function MovieDetail() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary">
           ← Torna Indietro
         </button>
+      </div>
+    );
+  }
+
+  // 🆕 Se movieDetails è null ma non stiamo caricando, mostra loading
+  if (!movieDetails) {
+    return (
+      <div className="movie-detail-loading">
+        <div className="loading-spinner"></div>
+        <p>Caricamento...</p>
       </div>
     );
   }

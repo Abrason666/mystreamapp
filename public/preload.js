@@ -9,5 +9,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   closeApp: () => {
     return ipcRenderer.invoke('close-app');
+  },
+  // 🆕 AGGIUNTE API PER NAVIGAZIONE AVANTI/INDIETRO
+  canGoBack: () => {
+    return ipcRenderer.invoke('can-go-back');
+  },
+  canGoForward: () => {
+    return ipcRenderer.invoke('can-go-forward');
+  },
+  goBack: () => {
+    return ipcRenderer.invoke('go-back');
+  },
+  goForward: () => {
+    return ipcRenderer.invoke('go-forward');
   }
 });

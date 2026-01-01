@@ -112,6 +112,35 @@ function createWindow() {
     app.quit();
   });
 
+  // 🆕 GESTORI IPC PER NAVIGAZIONE AVANTI/INDIETRO
+  ipcMain.handle('can-go-back', () => {
+    if (mainWindow && mainWindow.webContents) {
+      return mainWindow.webContents.canGoBack();
+    }
+    return false;
+  });
+
+  ipcMain.handle('can-go-forward', () => {
+    if (mainWindow && mainWindow.webContents) {
+      return mainWindow.webContents.canGoForward();
+    }
+    return false;
+  });
+
+  ipcMain.handle('go-back', () => {
+    if (mainWindow && mainWindow.webContents && mainWindow.webContents.canGoBack()) {
+      mainWindow.webContents.goBack();
+      log.info('⬅️ Navigazione indietro');
+    }
+  });
+
+  ipcMain.handle('go-forward', () => {
+    if (mainWindow && mainWindow.webContents && mainWindow.webContents.canGoForward()) {
+      mainWindow.webContents.goForward();
+      log.info('➡️ Navigazione avanti');
+    }
+  });
+
   // Blocca nuove finestre
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: 'deny' };
@@ -131,9 +160,33 @@ function createWindow() {
     
     log.info('📁 Build path:', buildPath);
     
-    serverApp.use(express.static(buildPath));
+    // 🔧 REWRITE PATH - DEVE STARE PRIMA DI express.static!
+    serverApp.use((req, res, next) => {
+      // Se l'URL contiene /static/ in qualsiasi posizione, estrai solo la parte /static/...
+      if (req.url.includes('/static/')) {
+        const staticIndex = req.url.indexOf('/static/');
+        req.url = req.url.substring(staticIndex);
+        log.info(`🔧 Path rewrite: ${req.url}`);
+      }
+      next();
+    });
     
-    serverApp.use((req, res) => {
+    // 🔧 Serve file statici con configurazione corretta
+    serverApp.use(express.static(buildPath, {
+      setHeaders: (res, filepath) => {
+        // Assicura che i file JS abbiano il content-type corretto
+        if (filepath.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript');
+        }
+        if (filepath.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css');
+        }
+      }
+    }));
+    
+    // 🆕 CATCH-ALL per React Router (usando funzione middleware)
+    serverApp.use((req, res, next) => {
+      // Serve index.html per tutte le altre richieste
       res.sendFile(path.join(buildPath, 'index.html'), (err) => {
         if (err) {
           log.error('❌ Errore:', err);

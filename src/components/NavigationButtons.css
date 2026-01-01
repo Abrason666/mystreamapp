@@ -1,0 +1,52 @@
+/* ========================================
+   NAVIGATION BUTTONS - Stile IDENTICO a HeroSection
+   ======================================== */
+
+.navigation-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  /* 🔧 Rimosso margin-right - lo spazio è gestito da .app-left-group */
+}
+
+/* 🆕 OVERRIDE DIMENSIONI SOLO PER I PULSANTI NELL'HEADER */
+.navigation-buttons .hero-nav-btn {
+  width: 45px !important;        /* 👈 PIÙ PICCOLI */
+  height: 45px !important;       /* 👈 PIÙ PICCOLI */
+  font-size: 1.3rem !important;  /* 👈 CARATTERE PIÙ PICCOLO */
+}
+
+/* 🎯 I pulsanti usano .hero-nav-btn che è già definito in HeroSection.css
+   Qui aggiungiamo SOLO lo stato "disabled" */
+
+.navigation-buttons .hero-nav-btn.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Responsive: Mobile */
+@media (max-width: 768px) {
+  .navigation-buttons {
+    gap: 8px;
+  }
+  
+  /* Mobile ancora più piccoli */
+  .navigation-buttons .hero-nav-btn {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 1.1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .navigation-buttons {
+    gap: 6px;
+  }
+  
+  .navigation-buttons .hero-nav-btn {
+    width: 35px !important;
+    height: 35px !important;
+    font-size: 1rem !important;
+  }
+}
