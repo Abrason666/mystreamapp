@@ -22,5 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   goForward: () => {
     return ipcRenderer.invoke('go-forward');
+  },
+  cleanExpiredCache: () => {
+    return ipcRenderer.invoke('clean-expired-cache');
   }
 });

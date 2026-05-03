@@ -104,11 +104,37 @@ class CacheService {
     }
   }
 
-  // Pulisce tutta la cache scaduta
   async cleanExpiredCache() {
-    console.log('🧹 Pulizia cache scaduta...');
-    // Implementazione per pulizia automatica
-    // (opzionale, da chiamare all'avvio dell'app)
+    const now = Date.now();
+    let cleaned = 0;
+
+    try {
+      if (window.electronAPI) {
+        cleaned = await window.electronAPI.cleanExpiredCache();
+      } else {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith('cache_')) continue;
+          try {
+            const entry = JSON.parse(localStorage.getItem(key));
+            if (!entry || !entry.expires || now > entry.expires) {
+              keysToRemove.push(key);
+            }
+          } catch {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        cleaned = keysToRemove.length;
+      }
+
+      if (cleaned > 0) {
+        console.log(`🧹 Cache pulita: ${cleaned} elementi scaduti rimossi`);
+      }
+    } catch (error) {
+      console.error('Errore pulizia cache:', error);
+    }
   }
 
   // Mostra statistiche cache

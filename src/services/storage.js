@@ -104,6 +104,32 @@ class StorageService {
       console.error('Errore salvataggio watched episodes:', e);
     }
   }
+
+  async getSearchHistory() {
+    try {
+      if (this.isElectron) {
+        const data = await window.electronAPI.loadData('mystream_search_history');
+        return data ? JSON.parse(data) : [];
+      } else {
+        return JSON.parse(localStorage.getItem('mystream_search_history') || '[]');
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async saveSearchHistory(history) {
+    try {
+      const data = JSON.stringify(history);
+      if (this.isElectron) {
+        await window.electronAPI.saveData('mystream_search_history', data);
+      } else {
+        localStorage.setItem('mystream_search_history', data);
+      }
+    } catch (e) {
+      console.error('Errore salvataggio cronologia:', e);
+    }
+  }
 }
 
 // Esporta istanza singleton

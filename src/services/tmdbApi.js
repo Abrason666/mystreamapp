@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { cacheService } from './cacheService'; // NUOVO IMPORT
 
-const API_KEY = '53a4c50394ff821ef3e752f7763ddd40';
+const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 const BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280';
@@ -101,6 +101,71 @@ export const discoverByGenre = async (genreId, type = 'movie', page = 1) => {
   } catch (error) {
     console.error('Errore discover per genere:', error);
     return [];
+  }
+};
+
+// Versione paginata: restituisce { results, totalPages, page }
+export const discoverByGenrePage = async (genreId, type = 'movie', page = 1) => {
+  try {
+    const cacheKey = `discover_paged_${type}_${genreId}_${page}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+
+    const endpoint = type === 'movie' ? '/discover/movie' : '/discover/tv';
+    const response = await tmdbApi.get(endpoint, {
+      params: { with_genres: genreId, sort_by: 'popularity.desc', 'vote_count.gte': 20, page }
+    });
+
+    const result = {
+      results: response.data.results,
+      page: response.data.page,
+      totalPages: Math.min(response.data.total_pages, 100),
+    };
+    await cacheService.saveToCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error('Errore discover paginato:', error);
+    return { results: [], page, totalPages: 0 };
+  }
+};
+
+export const searchMoviesPage = async (query, page = 1) => {
+  try {
+    const cacheKey = `search_movies_p_${query}_${page}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+
+    const response = await tmdbApi.get('/search/movie', { params: { query, page } });
+    const result = {
+      results: response.data.results.map(item => ({ ...item, type: 'movie' })),
+      page: response.data.page,
+      totalPages: response.data.total_pages,
+    };
+    await cacheService.saveToCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error('Errore ricerca film paginata:', error);
+    return { results: [], page, totalPages: 0 };
+  }
+};
+
+export const searchTVShowsPage = async (query, page = 1) => {
+  try {
+    const cacheKey = `search_tv_p_${query}_${page}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+
+    const response = await tmdbApi.get('/search/tv', { params: { query, page } });
+    const result = {
+      results: response.data.results.map(item => ({ ...item, type: 'tv' })),
+      page: response.data.page,
+      totalPages: response.data.total_pages,
+    };
+    await cacheService.saveToCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error('Errore ricerca TV paginata:', error);
+    return { results: [], page, totalPages: 0 };
   }
 };
 
@@ -483,7 +548,7 @@ export const getContentByGenre = async (genreId) => {
       return cached;
     }
 
-    console.log(`🎭 Caricando TUTTI i contenuti per genere: ${genreId}`);
+    console.log(`🎭 Caricando contenuti per genere: ${genreId}`);
     
     // 🆕 MAPPATURA GENERI: Film ID → Serie TV ID
     const genreMapping = {
@@ -511,8 +576,7 @@ export const getContentByGenre = async (genreId) => {
     
     console.log(`📺 Mappatura generi: Film=${genreId}, Serie TV=${tvGenreId}`);
     
-    // 🚀 CARICA TUTTE LE PAGINE DISPONIBILI
-    const maxPages = 20; // 20 pagine = ~400 risultati
+    const maxPages = 3; // 3 pagine = ~60 risultati per tipo, caricamento rapido
     
     const moviePromises = [];
     const tvPromises = [];
@@ -541,7 +605,7 @@ export const getContentByGenre = async (genreId) => {
       );
     }
     
-    console.log(`📥 Caricamento ${maxPages} pagine di film e ${maxPages} di serie TV...`);
+    console.log(`📥 Caricamento ${maxPages} pagine per film e serie TV...`);
     
     const [movieResults, tvResults] = await Promise.all([
       Promise.all(moviePromises),

@@ -50,6 +50,8 @@ function SmartImage({
       <img
         src={src}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         onLoad={handleImageLoad}
         onError={handleImageError}
         className={`smart-image ${isLoading ? 'smart-image-hidden' : 'smart-image-visible'}`}

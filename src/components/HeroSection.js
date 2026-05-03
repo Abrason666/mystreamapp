@@ -5,6 +5,9 @@ import ExpandableText from './ExpandableText';
 import UpcomingBadge from './UpcomingBadge';
 import './HeroSection.css';
 import storage from '../services/storage';
+import { SkeletonHero } from './Skeleton';
+import toast from 'react-hot-toast';
+import { Info, Play, Heart, ChevronLeft, ChevronRight, Pause } from 'lucide-react';
 
 function HeroSection() {
   const [heroItems, setHeroItems] = useState([]);
@@ -36,45 +39,38 @@ function HeroSection() {
   };
 
   useEffect(() => {
-    console.log('🔍 Debug storage:');
-    console.log('- window.electronAPI:', window.electronAPI);
-    console.log('- storage.isElectron():', storage.checkIfElectron());
-    console.log('- Tipo ambiente:', storage.isElectron ? 'Electron' : 'Browser');
-    
+    let isMounted = true;
+
     const loadHeroItems = async () => {
       setLoading(true);
-      
+
       try {
-        // Per ora carichiamo solo film trending
-        // In futuro puoi usare getTrendingAll() per mescolare film e serie TV
         const trending = await getTrendingMovies();
-        console.log(`✅ Contenuti caricati per hero: ${trending.length}`);
-        
-        // Aggiungi media_type esplicito se non presente (per i film)
+        if (!isMounted) return;
+
         const itemsWithType = trending.slice(0, 5).map(item => ({
           ...item,
-          media_type: item.media_type || 'movie' // Default a 'movie' per getTrendingMovies
+          media_type: item.media_type || 'movie'
         }));
-        
         setHeroItems(itemsWithType);
-        
-        // Carica stati favoriti
+
         const favorites = await storage.getFavorites();
+        if (!isMounted) return;
+
         const favStates = {};
         favorites.forEach(fav => {
-          // Crea una chiave unica: "movie_123" o "tv_456"
-          const key = `${fav.type}_${fav.id}`;
-          favStates[key] = true;
+          favStates[`${fav.type}_${fav.id}`] = true;
         });
         setFavoriteStates(favStates);
       } catch (error) {
         console.error('❌ Errore caricamento hero:', error);
       }
-      
-      setLoading(false);
+
+      if (isMounted) setLoading(false);
     };
 
     loadHeroItems();
+    return () => { isMounted = false; };
   }, []);
 
   // Auto-slide ogni 8 secondi (se non in pausa)
@@ -134,8 +130,13 @@ function HeroSection() {
     }
     
     await storage.saveFavorites(updatedFavorites);
-    
-    // Aggiorna stato locale con chiave unica
+
+    toast(isCurrentlyFavorite
+      ? `Rimosso dai preferiti`
+      : `Aggiunto ai preferiti`,
+      { icon: isCurrentlyFavorite ? '💔' : '🧡' }
+    );
+
     const key = `${type}_${item.id}`;
     setFavoriteStates(prev => ({
       ...prev,
@@ -148,15 +149,7 @@ function HeroSection() {
     }));
   };
 
-  // === LOADING STATE ===
-  if (loading) {
-    return (
-      <div className="hero-loading">
-        <div className="loading-spinner"></div>
-        <p>Caricamento contenuti in evidenza...</p>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonHero />;
 
   // === EMPTY STATE ===
   if (heroItems.length === 0) {
@@ -216,31 +209,29 @@ function HeroSection() {
             {/* 🆕 BOTTONI AZIONI - INLINE: Dettagli + Riproduci + Cuore */}
             <div className="hero-actions">
               {/* 1️⃣ VAI AI DETTAGLI - Stile primario */}
-              <button 
+              <button
                 className="btn btn-primary btn-lg"
                 onClick={() => goToDetails(currentItem)}
               >
-                <span className="btn-icon">ℹ️</span>
+                <Info size={18} />
                 <span className="btn-text">Vai ai Dettagli</span>
               </button>
-              
-              {/* 2️⃣ RIPRODUCI - Stile primario */}
-              <button 
+
+              <button
                 className="btn btn-primary btn-lg"
                 onClick={() => playItem(currentItem)}
               >
-                <span className="btn-icon">▶️</span>
+                <Play size={18} fill="currentColor" />
                 <span className="btn-text">Riproduci</span>
               </button>
-              
-              {/* 3️⃣ PREFERITI - SOLO ICONA CUORE */}
-              <button 
+
+              <button
                 className={`btn btn-secondary btn-lg btn-favorite ${isFavorite ? 'remove' : ''}`}
                 onClick={() => toggleFavorites(currentItem)}
                 title={isFavorite ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavorite ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavorite ? '🧡' : '🤍'}</span>
+                <Heart size={20} fill={isFavorite ? 'currentColor' : 'none'} />
               </button>
             </div>
           </div>
@@ -248,29 +239,29 @@ function HeroSection() {
         
         {/* CONTROLLI NAVIGAZIONE */}
         <div className="hero-navigation">
-          <button 
-            className="hero-nav-btn" 
+          <button
+            className="hero-nav-btn"
             onClick={() => setCurrentIndex(prev => (prev - 1 + heroItems.length) % heroItems.length)}
             aria-label="Contenuto precedente"
           >
-            ‹
+            <ChevronLeft size={28} />
           </button>
-          <button 
-            className="hero-nav-btn" 
+          <button
+            className="hero-nav-btn"
             onClick={() => setCurrentIndex(prev => (prev + 1) % heroItems.length)}
             aria-label="Contenuto successivo"
           >
-            ›
+            <ChevronRight size={28} />
           </button>
         </div>
         
         {/* BOTTONE PAUSA/PLAY */}
-        <button 
+        <button
           className="hero-pause-btn"
           onClick={() => setIsPaused(!isPaused)}
-          aria-label={isPaused ? "Riprendi carosello" : "Metti in pausa carosello"}
+          aria-label={isPaused ? 'Riprendi carosello' : 'Metti in pausa carosello'}
         >
-          {isPaused ? '▶' : '⏸'}
+          {isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
         </button>
       </div>
       

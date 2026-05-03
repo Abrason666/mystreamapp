@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMovieDetails, getBackdropUrl, getImageUrl } from '../services/tmdbApi';
+import { getMovieDetails, getBackdropUrl } from '../services/tmdbApi';
 import ExpandableText from './ExpandableText';
-import SmartImage from './SmartImage';
 import MovieCarousel from './MovieCarousel';
 import NetworkError from './NetworkError';
 import { isNetworkError } from '../utils/networkUtils';
 import './MovieDetail.css';
 import storage from '../services/storage';
 import axios from 'axios';
+import { SkeletonDetail } from './Skeleton';
+import toast from 'react-hot-toast';
+import { Play, Heart, Info, Users, Video, Star, Film } from 'lucide-react';
 
-// 🔑 API Key TMDB
-const API_KEY = '53a4c50394ff821ef3e752f7763ddd40';
+const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 function MovieDetail() {
@@ -22,7 +23,6 @@ function MovieDetail() {
   const [cast, setCast] = useState([]);
   const [crew, setCrew] = useState([]);
   const [videos, setVideos] = useState([]);
-  const [keywords, setKeywords] = useState([]);
   const [certification, setCertification] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -35,7 +35,12 @@ function MovieDetail() {
   // 🔧 RESET DELLA TAB QUANDO CAMBIA IL FILM
   useEffect(() => {
     setActiveTab('info');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [id]);
+
+  const loadFavoriteStatus = useCallback(async () => {
+    const favorites = await storage.getFavorites();
+    const isFavorite = favorites.some(fav => fav.id === parseInt(id) && fav.type === 'movie');
+    setIsFavoriteMovie(isFavorite);
   }, [id]);
 
   useEffect(() => {
@@ -50,7 +55,6 @@ function MovieDetail() {
         await Promise.all([
           loadCredits(id),
           loadVideos(id),
-          loadKeywords(id),
           loadCertification(id),
           loadRecommendations(id),
           loadReviews(id)
@@ -68,7 +72,7 @@ function MovieDetail() {
     };
 
     loadMovieData();
-  }, [id]);
+  }, [id, loadFavoriteStatus]);
 
   const loadCredits = async (movieId) => {
     try {
@@ -103,19 +107,6 @@ function MovieDetail() {
       console.log(`✅ Video: ${sortedVideos.length} trovati`);
     } catch (error) {
       console.error('❌ Errore caricamento video:', error);
-    }
-  };
-
-  const loadKeywords = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/keywords`, {
-        params: { api_key: API_KEY }
-      });
-      
-      setKeywords(response.data.keywords);
-      console.log(`✅ Keywords: ${response.data.keywords.length}`);
-    } catch (error) {
-      console.error('❌ Errore caricamento keywords:', error);
     }
   };
 
@@ -165,11 +156,6 @@ function MovieDetail() {
     }
   };
 
-  const loadFavoriteStatus = async () => {
-    const favorites = await storage.getFavorites();
-    const isFavorite = favorites.some(fav => fav.id === parseInt(id) && fav.type === 'movie');
-    setIsFavoriteMovie(isFavorite);
-  };
 
   const toggleFavorites = async () => {
     const favorites = await storage.getFavorites();
@@ -186,8 +172,11 @@ function MovieDetail() {
     }
     
     storage.saveFavorites(updatedFavorites);
-    window.dispatchEvent(new CustomEvent('favoritesChanged', { 
-      detail: { favorites: updatedFavorites } 
+    toast(isFavoriteMovie ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
+      { icon: isFavoriteMovie ? '💔' : '🧡' }
+    );
+    window.dispatchEvent(new CustomEvent('favoritesChanged', {
+      detail: { favorites: updatedFavorites }
     }));
   };
 
@@ -199,22 +188,11 @@ function MovieDetail() {
     window.location.reload();
   };
 
-  const handleRecommendationClick = (movie) => {
-    navigate(`/movie/${movie.id}`);
-  };
-
   const getDirector = () => crew.find(p => p.job === 'Director');
   const getScreenwriter = () => crew.find(p => p.job === 'Screenplay');
   const getProducers = () => crew.filter(p => p.job === 'Producer').slice(0, 3);
 
- if (loading) {
-    return (
-      <div className="movie-detail-loading">
-        <div className="loading-spinner"></div>
-        <p>Caricamento dettagli film...</p>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonDetail />;
 
   if (networkError) {
     return <NetworkError onRetry={handleRetry} />;
@@ -315,19 +293,17 @@ function MovieDetail() {
                 ======================================== */}
             <div className="movie-actions">
               <button className="btn btn-primary btn-lg" onClick={playMovie}>
-                <span className="btn-icon">▶️</span>
-                <div className="btn-text">
-                  <div>Riproduci</div>
-                </div>
+                <Play size={18} fill="currentColor" />
+                <span className="btn-text">Riproduci</span>
               </button>
-              
-              <button 
+
+              <button
                 className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteMovie ? 'remove' : ''}`}
                 onClick={toggleFavorites}
                 title={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavoriteMovie ? '🧡' : '🤍'}</span>
+                <Heart size={18} fill={isFavoriteMovie ? 'currentColor' : 'none'} />
                 <span className="btn-text">
                   {isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 </span>
@@ -342,44 +318,25 @@ function MovieDetail() {
           ======================================== */}
       <div className="movie-tabs-container">
         <div className="movie-tabs">
-          <button 
-            className={`tab-button ${activeTab === 'info' ? 'active' : ''}`}
-            onClick={() => setActiveTab('info')}
-          >
-            📊 Info
+          <button className={`tab-button ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>
+            <Info size={15} /> Info
           </button>
-          
-          <button 
-            className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cast')}
-          >
-            👥 Cast
+          <button className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`} onClick={() => setActiveTab('cast')}>
+            <Users size={15} /> Cast
           </button>
-          
           {videos.length > 0 && (
-            <button 
-              className={`tab-button ${activeTab === 'trailer' ? 'active' : ''}`}
-              onClick={() => setActiveTab('trailer')}
-            >
-              🎥 Trailer
+            <button className={`tab-button ${activeTab === 'trailer' ? 'active' : ''}`} onClick={() => setActiveTab('trailer')}>
+              <Video size={15} /> Trailer
             </button>
           )}
-          
           {reviews.length > 0 && (
-            <button 
-              className={`tab-button ${activeTab === 'reviews' ? 'active' : ''}`}
-              onClick={() => setActiveTab('reviews')}
-            >
-              ⭐ Recensioni
+            <button className={`tab-button ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>
+              <Star size={15} /> Recensioni
             </button>
           )}
-          
           {recommendations.length > 0 && (
-            <button 
-              className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`}
-              onClick={() => setActiveTab('similar')}
-            >
-              🎬 Film Simili
+            <button className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`} onClick={() => setActiveTab('similar')}>
+              <Film size={15} /> Film Simili
             </button>
           )}
         </div>
@@ -465,6 +422,8 @@ function MovieDetail() {
                       <img
                         src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
                         alt={actor.name}
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="cast-photo-placeholder">

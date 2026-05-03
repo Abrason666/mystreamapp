@@ -1,490 +1,466 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { searchMovies, searchTVShows, getContentByGenre } from '../services/tmdbApi';
+import {
+  searchMoviesPage,
+  searchTVShowsPage,
+  getTrendingMovies,
+  getTrendingTVShows,
+} from '../services/tmdbApi';
 import SearchResultsGrid from './SearchResultsGrid';
-import { NetworkErrorInline } from './NetworkError'; // 🆕 Import errore di rete inline
-import { isNetworkError } from '../utils/networkUtils'; // 🆕 Utility rete
-import './SearchComponent.css';
+import { NetworkErrorInline } from './NetworkError';
+import { isNetworkError } from '../utils/networkUtils';
+import { SkeletonCarousel } from './Skeleton';
+import MovieCarousel from './MovieCarousel';
+import { Search, X, Clock, Trash2, Film, Tv } from 'lucide-react';
 import storage from '../services/storage';
+import './SearchComponent.css';
 
-// 🎭 TUTTI I GENERI DISPONIBILI (chip scorrevoli)
-const ALL_GENRE_CHIPS = [
-  { id: null, name: 'Tutti', emoji: '🎬' },
-  { id: 28, name: 'Azione', emoji: '💥' },
-  { id: 12, name: 'Avventura', emoji: '🗺️' },
-  { id: 16, name: 'Animazione', emoji: '🎭' },
-  { id: 35, name: 'Commedia', emoji: '😂' },
-  { id: 80, name: 'Crimine', emoji: '🔫' },
-  { id: 99, name: 'Documentario', emoji: '🌍' },
-  { id: 18, name: 'Drammatico', emoji: '💔' },
-  { id: 10751, name: 'Famiglia', emoji: '👨‍👩‍👧' },
-  { id: 14, name: 'Fantasy', emoji: '🧙' },
-  { id: 36, name: 'Storia', emoji: '📜' },
-  { id: 27, name: 'Horror', emoji: '😱' },
-  { id: 10402, name: 'Musicale', emoji: '🎵' },
-  { id: 9648, name: 'Mistero', emoji: '🔍' },
-  { id: 10749, name: 'Romantico', emoji: '❤️' },
-  { id: 878, name: 'Fantascienza', emoji: '🔬' },
-  { id: 10770, name: 'Film TV', emoji: '📺' },
-  { id: 53, name: 'Thriller', emoji: '🕵️' },
-  { id: 10752, name: 'Guerra', emoji: '⚔️' },
-  { id: 37, name: 'Western', emoji: '🤠' }
+const SORT_OPTIONS = [
+  { value: 'popularity',   label: 'Popolarità' },
+  { value: 'rating',       label: 'Voto' },
+  { value: 'date',         label: 'Data' },
+  { value: 'alphabetical', label: 'A–Z' },
 ];
+const MAX_HISTORY  = 15;
+const THUMB_BASE   = 'https://image.tmdb.org/t/p/w92';
 
-// 🎭 GENERI PER LA GRIGLIA (stato iniziale)
-const GRID_GENRES = [
-  { id: 28, name: 'Azione', emoji: '🎬' },
-  { id: 35, name: 'Commedia', emoji: '😂' },
-  { id: 18, name: 'Drammatico', emoji: '💔' },
-  { id: 27, name: 'Horror', emoji: '😱' },
-  { id: 878, name: 'Fantascienza', emoji: '🔬' },
-  { id: 14, name: 'Fantasy', emoji: '🧙' },
-  { id: 53, name: 'Thriller', emoji: '🕵️' },
-  { id: 10749, name: 'Romantico', emoji: '❤️' },
-  { id: 16, name: 'Animazione', emoji: '🎭' },
-  { id: 99, name: 'Documentario', emoji: '🌍' },
-  { id: 10402, name: 'Musicale', emoji: '🎵' },
-  { id: 9648, name: 'Mistero', emoji: '🔍' }
-];
+// ── UTILITY: raggruppa per data ──────────────────────────────────────────────
+function groupByDate(history) {
+  const now       = new Date();
+  const todayStr  = now.toDateString();
+  const yestStr   = new Date(now - 86_400_000).toDateString();
+  const weekAgo   = new Date(now - 7 * 86_400_000);
+  const groups    = [];
+  const buckets   = { oggi: [], ieri: [], settimana: [], altro: [] };
 
+  history.forEach(item => {
+    const d = new Date(item.timestamp);
+    if      (d.toDateString() === todayStr) buckets.oggi.push(item);
+    else if (d.toDateString() === yestStr)  buckets.ieri.push(item);
+    else if (d >= weekAgo)                  buckets.settimana.push(item);
+    else                                    buckets.altro.push(item);
+  });
+
+  if (buckets.oggi.length)      groups.push({ label: 'Oggi',           items: buckets.oggi });
+  if (buckets.ieri.length)      groups.push({ label: 'Ieri',           items: buckets.ieri });
+  if (buckets.settimana.length) groups.push({ label: 'Questa settimana', items: buckets.settimana });
+  if (buckets.altro.length)     groups.push({ label: 'Più vecchio',    items: buckets.altro });
+  return groups;
+}
+
+// ── COMPONENTE ────────────────────────────────────────────────────────────────
 function SearchComponent() {
-  const [query, setQuery] = useState('');
-  const [movieResults, setMovieResults] = useState([]);
-  const [tvResults, setTvResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState(null);
-  const [contentType, setContentType] = useState('all');
-  const [sortOrder, setSortOrder] = useState('popularity');
-  const [networkError, setNetworkError] = useState(false); // 🆕 Stato errore rete
-  
-  const chipsScrollRef = useRef(null);
+  const inputRef       = useRef(null);
+  const dropdownRef    = useRef(null);
+  const loadingMoreRef = useRef(false);
+  const historyRef     = useRef([]);     // copia stabile per evitare stale closure
 
-  // ✨ DEBOUNCED SEARCH
+  const [query, setQuery]               = useState('');
+  const [movieResults, setMovieResults] = useState([]);
+  const [tvResults, setTvResults]       = useState([]);
+  const [loading, setLoading]           = useState(false);
+  const [loadingMore, setLoadingMore]   = useState(false);
+  const [hasSearched, setHasSearched]   = useState(false);
+  const [contentType, setContentType]   = useState('all');
+  const [sortOrder, setSortOrder]       = useState('popularity');
+  const [networkError, setNetworkError] = useState(false);
+
+  const [moviePage, setMoviePage]             = useState(1);
+  const [tvPage, setTvPage]                   = useState(1);
+  const [movieTotalPages, setMovieTotalPages] = useState(0);
+  const [tvTotalPages, setTvTotalPages]       = useState(0);
+
+  // Stato vuoto
+  const [trendingMovies, setTrendingMovies]   = useState([]);
+  const [trendingTV, setTrendingTV]           = useState([]);
+  const [loadingTrending, setLoadingTrending] = useState(true);
+
+  // Cronologia
+  const [searchHistory, setSearchHistory]     = useState([]);
+  const [confirmClear, setConfirmClear]       = useState(false);
+
+  // Dropdown autocomplete
+  const [showDropdown, setShowDropdown]       = useState(false);
+  const [dropdownIndex, setDropdownIndex]     = useState(-1);
+
+  // Tieni historyRef sincronizzato
+  useEffect(() => { historyRef.current = searchHistory; }, [searchHistory]);
+
+  // ── INIT ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    storage.getSearchHistory().then(h => { setSearchHistory(h); historyRef.current = h; });
+    Promise.all([getTrendingMovies(), getTrendingTVShows()]).then(([m, tv]) => {
+      setTrendingMovies(m);
+      setTrendingTV(tv);
+      setLoadingTrending(false);
+    });
+    inputRef.current?.focus();
+  }, []);
+
+  // Chiudi dropdown cliccando fuori
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+          inputRef.current && !inputRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ── CRONOLOGIA ──────────────────────────────────────────────────────────────
+  const addToHistory = (q, firstResult) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    const filtered = historyRef.current.filter(
+      h => h.query.toLowerCase() !== trimmed.toLowerCase()
+    );
+    const updated = [{
+      query: trimmed,
+      timestamp: Date.now(),
+      poster: firstResult?.poster_path || null,
+      type:   firstResult?.type || null,
+    }, ...filtered].slice(0, MAX_HISTORY);
+    setSearchHistory(updated);
+    historyRef.current = updated;
+    storage.saveSearchHistory(updated);
+  };
+
+  const removeFromHistory = async (q, e) => {
+    e.stopPropagation();
+    const updated = historyRef.current.filter(h => h.query !== q);
+    setSearchHistory(updated);
+    historyRef.current = updated;
+    await storage.saveSearchHistory(updated);
+  };
+
+  const clearHistory = async () => {
+    setSearchHistory([]);
+    historyRef.current = [];
+    setConfirmClear(false);
+    await storage.saveSearchHistory([]);
+  };
+
+  const handleClearAll = () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      setTimeout(() => setConfirmClear(false), 3000);
+    } else {
+      clearHistory();
+    }
+  };
+
+  // ── DROPDOWN ────────────────────────────────────────────────────────────────
+  const dropdownItems = query.trim()
+    ? historyRef.current.filter(h =>
+        h.query.toLowerCase().includes(query.toLowerCase()) &&
+        h.query.toLowerCase() !== query.toLowerCase()
+      ).slice(0, 6)
+    : [];
+
+  const selectDropdownItem = (item) => {
+    setQuery(item.query);
+    setShowDropdown(false);
+    setDropdownIndex(-1);
+    performSearch(item.query);
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (!showDropdown || dropdownItems.length === 0) {
+      if (e.key === 'Enter') performSearch(query);
+      if (e.key === 'Escape') setShowDropdown(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setDropdownIndex(i => Math.min(i + 1, dropdownItems.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setDropdownIndex(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (dropdownIndex >= 0) selectDropdownItem(dropdownItems[dropdownIndex]);
+      else performSearch(query);
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setDropdownIndex(-1);
+    }
+  };
+
+  // ── PAGINAZIONE ─────────────────────────────────────────────────────────────
+  const resetPagination = () => {
+    setMoviePage(1); setTvPage(1);
+    setMovieTotalPages(0); setTvTotalPages(0);
+    setMovieResults([]); setTvResults([]);
+  };
+
+  // ── RICERCA ─────────────────────────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const performSearch = useCallback(async (searchQuery) => {
-    if (!searchQuery.trim()) {
-      setMovieResults([]);
-      setTvResults([]);
+    const q = searchQuery.trim();
+    if (!q) {
+      resetPagination();
       setHasSearched(false);
       setLoading(false);
       setNetworkError(false);
       return;
     }
-    
+
     setLoading(true);
     setHasSearched(true);
-    setNetworkError(false); // Reset errore
-    
+    setNetworkError(false);
+    setShowDropdown(false);
+    resetPagination();
+
     try {
-      console.log(`🔍 Ricerca real-time: "${searchQuery}"`);
-      
-      const [movieSearchResults, tvSearchResults] = await Promise.all([
-        searchMovies(searchQuery),
-        searchTVShows(searchQuery)
+      const [mRes, tRes] = await Promise.all([
+        searchMoviesPage(q, 1),
+        searchTVShowsPage(q, 1),
       ]);
-      
-      setMovieResults(movieSearchResults);
-      setTvResults(tvSearchResults);
-      setNetworkError(false); // Successo!
-    } catch (error) {
-      console.error('❌ Errore ricerca:', error);
-      
-      // 🆕 Controlla se è errore di rete
-      if (isNetworkError(error)) {
-        setNetworkError(true);
+
+      // Salva in cronologia SOLO se ci sono risultati
+      const hasResults = mRes.results.length > 0 || tRes.results.length > 0;
+      if (hasResults) {
+        const first = mRes.results[0] || tRes.results[0];
+        addToHistory(q, first);
       }
-      
-      setMovieResults([]);
-      setTvResults([]);
+
+      setMovieResults(mRes.results);
+      setTvResults(tRes.results);
+      setMoviePage(1); setMovieTotalPages(mRes.totalPages);
+      setTvPage(1);    setTvTotalPages(tRes.totalPages);
+    } catch (error) {
+      if (isNetworkError(error)) setNetworkError(true);
     }
-    
     setLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (query.trim().length >= 1) {
-        performSearch(query);
-      } else if (query.trim().length === 0) {
-        setMovieResults([]);
-        setTvResults([]);
-        setHasSearched(false);
-        setLoading(false);
-        setNetworkError(false);
-      }
-    }, 500);
-
-    return () => clearTimeout(debounceTimer);
+    const t = setTimeout(() => {
+      if (query.trim().length >= 1) performSearch(query);
+      else { resetPagination(); setHasSearched(false); setLoading(false); setNetworkError(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, performSearch]);
 
-  // 🔄 RETRY: Riprova il caricamento
-  const handleRetry = () => {
-    if (query.trim()) {
-      performSearch(query);
-    } else if (selectedGenre) {
-      const genre = ALL_GENRE_CHIPS.find(g => g.id === selectedGenre);
-      if (genre) {
-        handleGenreCardClick(selectedGenre, genre.name);
-      }
-    }
-  };
+  // ── LOAD MORE ───────────────────────────────────────────────────────────────
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMoreRef.current) return;
+    const canMovie = moviePage < movieTotalPages;
+    const canTV    = tvPage < tvTotalPages;
+    if (!canMovie && !canTV) return;
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    performSearch(query);
-  };
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
+    try {
+      const fetches = [];
+      if (canMovie) fetches.push(searchMoviesPage(query, moviePage + 1).then(r => ({ kind: 'movie', ...r, next: moviePage + 1 })));
+      if (canTV)    fetches.push(searchTVShowsPage(query, tvPage + 1).then(r => ({ kind: 'tv',    ...r, next: tvPage + 1 })));
+      (await Promise.all(fetches)).forEach(r => {
+        if (r.kind === 'movie') { setMovieResults(p => [...p, ...r.results]); setMoviePage(r.next); setMovieTotalPages(r.totalPages); }
+        else                   { setTvResults(p => [...p, ...r.results]);    setTvPage(r.next);    setTvTotalPages(r.totalPages); }
+      });
+    } catch { /* silently fail */ }
 
-  const handleInputChange = (e) => {
-    const newQuery = e.target.value;
-    setQuery(newQuery);
-    
-    if (newQuery.trim().length >= 1 && hasSearched) {
-      setLoading(true);
-    }
-  };
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+  }, [moviePage, tvPage, movieTotalPages, tvTotalPages, query]);
 
   const clearSearch = () => {
     setQuery('');
-    setMovieResults([]);
-    setTvResults([]);
+    resetPagination();
     setHasSearched(false);
     setLoading(false);
-    setSelectedGenre(null);
     setNetworkError(false);
+    setShowDropdown(false);
+    inputRef.current?.focus();
   };
 
-  // 🔧 FUNZIONE: Click su chip genere
-  const handleGenreClick = async (genreId, genreName) => {
-    setSelectedGenre(genreId);
-    
-    // 🎯 CASO SPECIALE: Click su "Tutti" con barra vuota → RESET COMPLETO
-    if (genreId === null && !query.trim()) {
-      console.log('🎬 Reset completo: tornando alla griglia categorie');
-      setMovieResults([]);
-      setTvResults([]);
-      setHasSearched(false);
-      setLoading(false);
-      setNetworkError(false);
-      return;
-    }
-    
-    // 🎯 CASO 1: BARRA VUOTA → Carica contenuti per genere
-    if (!query.trim() && genreId !== null) {
-      console.log(`🎭 Caricando top contenuti per genere: ${genreName}`);
-      setLoading(true);
-      setHasSearched(true);
-      setNetworkError(false);
-      
-      try {
-        const content = await getContentByGenre(genreId);
-        
-        const movies = content.filter(item => item.type === 'movie');
-        const tvShows = content.filter(item => item.type === 'tv');
-        
-        setMovieResults(movies);
-        setTvResults(tvShows);
-        setNetworkError(false);
-      } catch (error) {
-        console.error('❌ Errore caricamento genere:', error);
-        
-        if (isNetworkError(error)) {
-          setNetworkError(true);
-        }
-        
-        setMovieResults([]);
-        setTvResults([]);
-      }
-      
-      setLoading(false);
-    }
-    
-    // 🎯 CASO 2: BARRA PIENA → Il filtro viene applicato automaticamente
-    if (genreId === null && query.trim()) {
-      console.log('🎬 Filtro genere rimosso, mostrando tutti i risultati');
-    }
-  };
-
-  // 🆕 FUNZIONE: Click su card genere (nella griglia)
-  const handleGenreCardClick = async (genreId, genreName) => {
-    console.log(`🎭 Caricando contenuti per genere: ${genreName}`);
-    setLoading(true);
-    setHasSearched(true);
-    setSelectedGenre(genreId);
-    setNetworkError(false);
-    
-    try {
-      const content = await getContentByGenre(genreId);
-      
-      const movies = content.filter(item => item.type === 'movie');
-      const tvShows = content.filter(item => item.type === 'tv');
-      
-      setMovieResults(movies);
-      setTvResults(tvShows);
-      setNetworkError(false);
-    } catch (error) {
-      console.error('❌ Errore caricamento genere:', error);
-      
-      if (isNetworkError(error)) {
-        setNetworkError(true);
-      }
-      
-      setMovieResults([]);
-      setTvResults([]);
-    }
-    
-    setLoading(false);
-  };
-
-  // 🆕 FUNZIONE: Cambio tipo contenuto
-  const handleContentTypeChange = (type) => {
-    setContentType(type);
-  };
-
-  // 🆕 SCROLL CHIP - Sinistra/Destra
-  const scrollChips = (direction) => {
-    if (chipsScrollRef.current) {
-      const scrollAmount = 300;
-      const newScrollLeft = chipsScrollRef.current.scrollLeft + (direction === 'left' ? -scrollAmount : scrollAmount);
-      chipsScrollRef.current.scrollTo({
-        left: newScrollLeft,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-
-  // 🆕 FILTRA RISULTATI solo per tipo (genere già filtrato da API)
-  const getFilteredResults = (results, type) => {
-    let filtered = results;
-    
-    // 🎯 FILTRO GENERE SOLO PER RICERCA TESTUALE (non per generi cliccati)
-    if (selectedGenre !== null && query.trim()) {
-      // Se c'è una ricerca testuale E un genere selezionato, applica filtro client-side
-      filtered = filtered.filter(item => 
-        item.genre_ids && item.genre_ids.includes(selectedGenre)
-      );
-    }
-    
-    // Filtra per tipo se non è "all"
-    if (contentType !== 'all') {
-      if (type !== contentType) {
-        return [];
-      }
-    }
-    
-    return filtered;
-  };
-
-  // 🆕 ORDINA RISULTATI in base alla scelta utente
-  const getSortedResults = (items) => {
-    const combined = [...items];
-    
+  // ── FILTRA E ORDINA ─────────────────────────────────────────────────────────
+  const getFiltered = (results, type) => contentType !== 'all' && contentType !== type ? [] : results;
+  const getSorted   = (items) => {
+    const c = [...items];
     switch (sortOrder) {
-      case 'alphabetical':
-        return combined.sort((a, b) => {
-          const nameA = (a.title || a.name).toLowerCase();
-          const nameB = (b.title || b.name).toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-        
-      case 'date':
-        return combined.sort((a, b) => {
-          const dateA = new Date(a.release_date || a.first_air_date || '1900-01-01');
-          const dateB = new Date(b.release_date || b.first_air_date || '1900-01-01');
-          return dateB - dateA;
-        });
-        
-      case 'rating':
-        return combined.sort((a, b) => b.vote_average - a.vote_average);
-        
-      case 'random':
-        return combined.sort(() => Math.random() - 0.5);
-        
-      case 'popularity':
-      default:
-        return combined.sort((a, b) => b.popularity - a.popularity);
+      case 'alphabetical': return c.sort((a, b) => (a.title || a.name || '').toLowerCase().localeCompare((b.title || b.name || '').toLowerCase()));
+      case 'date':         return c.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
+      case 'rating':       return c.sort((a, b) => b.vote_average - a.vote_average);
+      default:             return c.sort((a, b) => b.popularity - a.popularity);
     }
   };
 
-  const filteredMovies = getFilteredResults(movieResults, 'movie');
-  const filteredTV = getFilteredResults(tvResults, 'tv');
+  const combinedItems = getSorted([...getFiltered(movieResults, 'movie'), ...getFiltered(tvResults, 'tv')]);
+  const hasMore       = moviePage < movieTotalPages || tvPage < tvTotalPages;
+  const historyGroups = groupByDate(searchHistory);
 
+  // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="search-component">
-      {/* Barra di ricerca */}
+
+      {/* HEADER STICKY */}
       <div className="search-header">
-        <div className="search-input-container">
-          <input
-            type="text"
-            placeholder="Cerca film, serie TV..."
-            value={query}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            className="search-input"
-          />
-          <button 
-            onClick={handleSearch} 
-            className="search-button" 
-            disabled={loading || !query.trim()}
-          >
-            {loading ? '🔄' : '🔍'}
-          </button>
-          {hasSearched && (
-            <button onClick={clearSearch} className="clear-button">
-              ✕
-            </button>
-          )}
-        </div>
+        <div className="search-bar-row">
 
-        {/* 🆕 CHIP GENERI SCORREVOLI */}
-        {/* 🆕 FILTERS ROW - LAYOUT COMPATTO */}
-        <div className="filters-row">
-          {/* CHIP GENERI */}
-          <div className="genre-chips">
-            <span className="chips-label">🎭 Genere:</span>
-            
-            <div className="chips-scroll-wrapper">
-              <button 
-                className="chips-scroll-btn left"
-                onClick={() => scrollChips('left')}
-                aria-label="Scorri generi a sinistra"
-              >
-                ‹
+          {/* Input + Dropdown */}
+          <div className="search-input-wrapper" ref={dropdownRef}>
+            <Search size={18} className="search-icon-inside" />
+            <input
+              ref={inputRef}
+              type="text"
+              className="search-input"
+              placeholder="Cerca film, serie TV, attori..."
+              value={query}
+              onChange={e => { setQuery(e.target.value); setShowDropdown(true); setDropdownIndex(-1); }}
+              onFocus={() => { if (query.trim()) setShowDropdown(true); }}
+              onKeyDown={handleInputKeyDown}
+            />
+            {query && (
+              <button className="search-clear-inline" onClick={clearSearch} aria-label="Cancella">
+                <X size={16} />
               </button>
-              
-              <div className="chips-container-scrollable" ref={chipsScrollRef}>
-                {ALL_GENRE_CHIPS.map(genre => (
-                  <button
-                    key={genre.id || 'all'}
-                    className={`genre-chip ${selectedGenre === genre.id ? 'active' : ''}`}
-                    onClick={() => handleGenreClick(genre.id, genre.name)}
+            )}
+
+            {/* Dropdown autocomplete */}
+            {showDropdown && dropdownItems.length > 0 && (
+              <ul className="search-dropdown">
+                {dropdownItems.map((item, i) => (
+                  <li
+                    key={item.query + item.timestamp}
+                    className={`dropdown-item ${i === dropdownIndex ? 'focused' : ''}`}
+                    onMouseDown={() => selectDropdownItem(item)}
+                    onMouseEnter={() => setDropdownIndex(i)}
                   >
-                    <span className="chip-emoji">{genre.emoji}</span>
-                    <span className="chip-text">{genre.name}</span>
-                  </button>
+                    {item.poster ? (
+                      <img
+                        src={`${THUMB_BASE}${item.poster}`}
+                        alt=""
+                        className="dropdown-thumb"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="dropdown-thumb-placeholder">
+                        {item.type === 'tv' ? <Tv size={14} /> : <Film size={14} />}
+                      </div>
+                    )}
+                    <span className="dropdown-query">{item.query}</span>
+                    <Search size={13} className="dropdown-icon-right" />
+                  </li>
                 ))}
-              </div>
-              
-              <button 
-                className="chips-scroll-btn right"
-                onClick={() => scrollChips('right')}
-                aria-label="Scorri generi a destra"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* TYPE + SORT IN UNA RIGA */}
-        <div className="type-sort-row">
-          {/* TIPO CONTENUTO */}
-          <div className="content-type-filter">
-            
-            <div className="type-buttons">
-              <button
-                className={`type-btn ${contentType === 'all' ? 'active' : ''}`}
-                onClick={() => handleContentTypeChange('all')}
-              >
-                Tutti
-              </button>
-              <button
-                className={`type-btn ${contentType === 'movie' ? 'active' : ''}`}
-                onClick={() => handleContentTypeChange('movie')}
-              >
-                🎬 Film
-              </button>
-              <button
-                className={`type-btn ${contentType === 'tv' ? 'active' : ''}`}
-                onClick={() => handleContentTypeChange('tv')}
-              >
-                📺 Serie TV
-              </button>
-            </div>
+              </ul>
+            )}
           </div>
 
-          {/* ORDINAMENTO */}
-          <div className="sort-selector">
-            <span className="sort-label">📊 Ordina:</span>
-            <select 
-              value={sortOrder} 
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="sort-dropdown"
-            >
-              <option value="popularity">⭐ Popolarità</option>
-              <option value="alphabetical">🔤 Alfabetico (A-Z)</option>
-              <option value="date">📅 Data uscita</option>
-              <option value="rating">🏆 Voto alto</option>
-              <option value="random">🎲 Casuale</option>
-            </select>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 🆕 ERRORE DI RETE */}
-      {networkError && !loading && (
-        <NetworkErrorInline 
-          message="Impossibile caricare i risultati. Controlla la connessione."
-          onRetry={handleRetry}
-        />
-      )}
-
-      {/* 🆕 GRIGLIA CATEGORIE (stato iniziale - campo vuoto) */}
-      {!hasSearched && !loading && (
-        <div className="genre-grid-section">
-          <h2 className="grid-title">📋 Esplora per Categorie</h2>
-          <p className="grid-subtitle">Scopri contenuti organizzati per genere</p>
-          
-          <div className="genre-grid">
-            {GRID_GENRES.map(genre => (
-              <div
-                key={genre.id}
-                className="genre-card"
-                onClick={() => handleGenreCardClick(genre.id, genre.name)}
-              >
-                <div className="genre-card-emoji">{genre.emoji}</div>
-                <h3 className="genre-card-title">{genre.name}</h3>
-              </div>
+          {/* Tipo */}
+          <div className="type-pills">
+            {[['all','Tutti'],['movie','Film'],['tv','Serie TV']].map(([val, label]) => (
+              <button key={val} className={`type-pill ${contentType === val ? 'active' : ''}`} onClick={() => setContentType(val)}>
+                {label}
+              </button>
             ))}
           </div>
+
+          {/* Sort */}
+          <select className="sort-select" value={sortOrder} onChange={e => setSortOrder(e.target.value)} aria-label="Ordina per">
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* ERRORE RETE */}
+      {networkError && !loading && (
+        <NetworkErrorInline message="Impossibile caricare i risultati." onRetry={() => performSearch(query)} />
+      )}
+
+      {/* STATO VUOTO */}
+      {!hasSearched && !loading && (
+        <div className="search-empty-state">
+
+          {/* CRONOLOGIA */}
+          <section className="history-section">
+            <div className="section-header">
+              <h2 className="section-title"><Clock size={17} /> Cronologia</h2>
+              {searchHistory.length > 0 && (
+                <button
+                  className={`history-clear-btn ${confirmClear ? 'confirm' : ''}`}
+                  onClick={handleClearAll}
+                >
+                  <Trash2 size={13} />
+                  {confirmClear ? 'Conferma cancellazione' : 'Cancella tutto'}
+                </button>
+              )}
+            </div>
+
+            {historyGroups.length > 0 ? (
+              historyGroups.map(group => (
+                <div key={group.label} className="history-group">
+                  <p className="history-group-label">{group.label}</p>
+                  <ul className="history-list">
+                    {group.items.map(item => (
+                      <li key={item.query + item.timestamp} className="history-item">
+                        <button className="history-item-text" onClick={() => { setQuery(item.query); performSearch(item.query); }}>
+                          {item.poster ? (
+                            <img src={`${THUMB_BASE}${item.poster}`} alt="" className="history-thumb" loading="lazy" />
+                          ) : (
+                            <div className="history-thumb-placeholder">
+                              {item.type === 'tv' ? <Tv size={13} /> : item.type === 'movie' ? <Film size={13} /> : <Search size={13} />}
+                            </div>
+                          )}
+                          <span className="history-query">{item.query}</span>
+                          <span className="history-date">{new Date(item.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </button>
+                        <button className="history-item-remove" onClick={(e) => removeFromHistory(item.query, e)} aria-label="Rimuovi">
+                          <X size={13} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            ) : (
+              <p className="history-empty">Le tue ricerche recenti appariranno qui</p>
+            )}
+          </section>
+
+          {/* TRENDING */}
+          <section className="trending-section">
+            {loadingTrending ? (
+              <><SkeletonCarousel /><SkeletonCarousel /></>
+            ) : (
+              <>
+                {trendingMovies.length > 0 && <MovieCarousel title="Film di Tendenza" items={trendingMovies} type="movie" />}
+                {trendingTV.length > 0      && <MovieCarousel title="Serie TV di Tendenza" items={trendingTV} type="tv" />}
+              </>
+            )}
+          </section>
         </div>
       )}
 
-      {/* Risultati come Griglia Paginata */}
+      {/* LOADING */}
+      {loading && (
+        <div className="search-results-area">
+          <div className="search-skeleton-grid">
+            {Array.from({ length: 16 }).map((_, i) => <div key={i} className="skeleton skeleton-grid-card" />)}
+          </div>
+        </div>
+      )}
+
+      {/* RISULTATI */}
       {hasSearched && !loading && !networkError && (
-        <div className="search-results">
-          {(filteredMovies.length > 0 || filteredTV.length > 0) ? (
-            <SearchResultsGrid 
-              items={getSortedResults([...filteredMovies, ...filteredTV])} 
-              query={query || `Genere: ${ALL_GENRE_CHIPS.find(g => g.id === selectedGenre)?.name || 'Tutti'}`}
-              selectedGenre={selectedGenre}
-              contentType={contentType}
-            />
+        <div className="search-results-area">
+          {combinedItems.length > 0 ? (
+            <SearchResultsGrid items={combinedItems} query={query} hasMore={hasMore} onLoadMore={handleLoadMore} loadingMore={loadingMore} />
           ) : (
-            <div className="no-results">
-              <h3>😔 Nessun risultato trovato</h3>
-              <p>Prova a cambiare i filtri o i termini di ricerca</p>
-              <button onClick={clearSearch} className="try-again-button">
-                🔄 Nuova Ricerca
-              </button>
+            <div className="search-no-results">
+              <p className="no-results-title">Nessun risultato per "{query}"</p>
+              <p className="no-results-sub">Prova con termini diversi o cambia il filtro tipo</p>
+              <button className="no-results-btn" onClick={clearSearch}>Nuova ricerca</button>
             </div>
           )}
         </div>
       )}
 
-      {/* Loading state */}
-      {loading && (
-        <div className="search-loading">
-          <div className="loading-spinner"></div>
-          <p>Ricerca in corso...</p>
-        </div>
-      )}
     </div>
   );
 }

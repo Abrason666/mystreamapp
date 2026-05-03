@@ -7,6 +7,8 @@ import './MovieCarousel.css';
 import './SmartImage.css';
 import './PlaceholderImage.css';
 import storage from '../services/storage';
+import { Play, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
   const navigate = useNavigate();
@@ -14,34 +16,21 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [localFavorites, setLocalFavorites] = useState([]);
-  const [forceUpdate, setForceUpdate] = useState(0);
 
-  // Carica i favoriti localmente per aggiornamenti real-time
   useEffect(() => {
-    const loadFavorites = async () => {
-      const favorites = await storage.getFavorites();
-      setLocalFavorites(favorites);
-      setForceUpdate(prev => prev + 1);
-    };
-    
-    loadFavorites();
-    
-    // Ascolta cambiamenti nei favoriti da TUTTI i componenti
+    // Caricamento iniziale
+    storage.getFavorites().then(setLocalFavorites);
+
     const handleFavoritesChange = (event) => {
-      console.log('🔄 Aggiornamento favoriti ricevuto nel carousel:', title);
-      loadFavorites();
+      // Usa i dati già presenti nell'evento, senza ri-fetchare dallo storage
+      if (event.detail?.favorites) {
+        setLocalFavorites(event.detail.favorites);
+      }
     };
-    
-    const handleStorageChange = () => loadFavorites();
-    
+
     window.addEventListener('favoritesChanged', handleFavoritesChange);
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('favoritesChanged', handleFavoritesChange);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [title]);
+    return () => window.removeEventListener('favoritesChanged', handleFavoritesChange);
+  }, []);
 
   const checkScrollButtons = () => {
     const carousel = carouselRef.current;
@@ -161,8 +150,10 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
       console.log('❤️ Aggiunto ai favoriti:', item.title || item.name);
     }
     
-    // Salva e aggiorna stato locale
     await storage.saveFavorites(updatedFavorites);
+    toast(isAlreadyFavorite ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
+      { icon: isAlreadyFavorite ? '💔' : '🧡' }
+    );
     setLocalFavorites(updatedFavorites);
     
     // Notifica il parent component
@@ -170,18 +161,9 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
       onFavoritesChange(updatedFavorites);
     }
     
-    // Trigger evento personalizzato per aggiornare TUTTI gli altri componenti
-    window.dispatchEvent(new CustomEvent('favoritesChanged', { 
-      detail: { 
-        favorites: updatedFavorites,
-        action: isAlreadyFavorite ? 'removed' : 'added',
-        item: item,
-        timestamp: Date.now()
-      } 
+    window.dispatchEvent(new CustomEvent('favoritesChanged', {
+      detail: { favorites: updatedFavorites }
     }));
-    
-    // Force re-render di questo componente
-    setForceUpdate(prev => prev + 1);
   };
 
   const isFavorite = (item) => {
@@ -198,11 +180,8 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
       
       <div className="carousel-container">
         {canScrollLeft && (
-          <button 
-            className="carousel-button left"
-            onClick={scrollLeft}
-          >
-            ‹
+          <button className="carousel-button left" onClick={scrollLeft} aria-label="Scorri a sinistra">
+            <ChevronLeft size={28} />
           </button>
         )}
         
@@ -217,7 +196,7 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
             
             return (
               <div 
-                key={`${item.id}-${itemType}-${forceUpdate}`}
+                key={`${item.id}-${itemType}`}
                 className="carousel-item"
                 onClick={() => handleItemClick(item)}
               >
@@ -255,22 +234,21 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
                     </div>
                     
                     <div className="item-actions">
-                      <button 
+                      <button
                         className="play-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleItemClick(item);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
+                        aria-label="Riproduci"
                       >
-                        ▶️
+                        <Play size={18} fill="currentColor" />
                       </button>
-                      
-                      <button 
+
+                      <button
                         className={`favorite-button ${isItemFavorite ? 'active' : ''}`}
                         onClick={(e) => addToFavorites(item, e)}
                         title={isItemFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+                        aria-label={isItemFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                       >
-                        {isItemFavorite ? '🧡' : '🤍'}
+                        <Heart size={16} fill={isItemFavorite ? 'currentColor' : 'none'} />
                       </button>
                     </div>
                   </div>
@@ -281,11 +259,8 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
         </div>
         
         {canScrollRight && (
-          <button 
-            className="carousel-button right"
-            onClick={scrollRight}
-          >
-            ›
+          <button className="carousel-button right" onClick={scrollRight} aria-label="Scorri a destra">
+            <ChevronRight size={28} />
           </button>
         )}
       </div>

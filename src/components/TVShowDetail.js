@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getTVSeasons, getSeasonEpisodes, getBackdropUrl, getEpisodeImageUrl } from '../services/tmdbApi';
 import ExpandableText from './ExpandableText';
@@ -8,9 +8,11 @@ import './TVShowDetail.css';
 import './ExpandableText.css';
 import storage from '../services/storage';
 import axios from 'axios';
+import { SkeletonDetail } from './Skeleton';
+import toast from 'react-hot-toast';
+import { Play, SkipForward, RefreshCw, Heart, List, Users, Film, Eye, Check, Star, User } from 'lucide-react';
 
-// 🔑 API Key TMDB
-const API_KEY = '53a4c50394ff821ef3e752f7763ddd40';
+const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 function TVShowDetail({ initialSeason }) {
@@ -41,7 +43,19 @@ function TVShowDetail({ initialSeason }) {
   // 🔧 RESET DELLA TAB QUANDO CAMBIA LA SERIE
   useEffect(() => {
     setActiveTab('episodes');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [id]);
+
+  const loadFavoriteStatus = useCallback(async () => {
+    const favorites = await storage.getFavorites();
+    const isFavorite = favorites.some(fav => fav.id === parseInt(id) && fav.type === 'tv');
+    setIsFavoriteShow(isFavorite);
+  }, [id]);
+
+  const loadWatchingData = useCallback(async () => {
+    const watched = await storage.getWatchedEpisodes(id) || [];
+    setWatchedEpisodes(watched);
+    const continueData = await storage.getContinueWatching(id);
+    setContinueWatching(continueData);
   }, [id]);
 
   // ============================================
@@ -99,14 +113,60 @@ function TVShowDetail({ initialSeason }) {
     };
 
     loadShowData();
-  }, [id, initialSeason]);
+  }, [id, initialSeason, loadFavoriteStatus, loadWatchingData]);
 
-  // 🆕 CALCOLA EPISODIO SUCCESSIVO quando cambiano continueWatching o seasons
+  const calculateNextEpisode = useCallback(async () => {
+    if (!continueWatching || seasons.length === 0) {
+      setNextEpisode(null);
+      return;
+    }
+
+    const currentSeason = continueWatching.seasonNumber;
+    const currentEpisode = continueWatching.episodeNumber;
+
+    try {
+      const currentSeasonEpisodes = await getSeasonEpisodes(id, currentSeason);
+
+      if (currentEpisode < currentSeasonEpisodes.length) {
+        const nextEp = currentSeasonEpisodes[currentEpisode];
+        setNextEpisode({
+          seasonNumber: currentSeason,
+          episodeNumber: currentEpisode + 1,
+          episodeTitle: nextEp.name,
+          exists: true
+        });
+        return;
+      }
+
+      const nextSeasonNumber = currentSeason + 1;
+      const nextSeasonExists = seasons.find(s => s.season_number === nextSeasonNumber);
+
+      if (nextSeasonExists) {
+        const nextSeasonEpisodes = await getSeasonEpisodes(id, nextSeasonNumber);
+        if (nextSeasonEpisodes.length > 0) {
+          const firstEp = nextSeasonEpisodes[0];
+          setNextEpisode({
+            seasonNumber: nextSeasonNumber,
+            episodeNumber: 1,
+            episodeTitle: firstEp.name,
+            exists: true
+          });
+          return;
+        }
+      }
+
+      setNextEpisode({ exists: false, seriesCompleted: true });
+    } catch (error) {
+      console.error('Errore calcolo episodio successivo:', error);
+      setNextEpisode(null);
+    }
+  }, [continueWatching, seasons, id]);
+
   useEffect(() => {
     if (continueWatching && seasons.length > 0) {
       calculateNextEpisode();
     }
-  }, [continueWatching, seasons]);
+  }, [continueWatching, seasons, calculateNextEpisode]);
 
   // 🆕 CARICA CAST E CREW
   const loadCredits = async (tvId) => {
@@ -160,11 +220,6 @@ function TVShowDetail({ initialSeason }) {
   // ============================================
   // 💾 GESTIONE PREFERITI
   // ============================================
-  const loadFavoriteStatus = async () => {
-    const favorites = await storage.getFavorites();
-    const isFavorite = favorites.some(fav => fav.id === parseInt(id) && fav.type === 'tv');
-    setIsFavoriteShow(isFavorite);
-  };
 
   const toggleFavorites = async () => {
     const favorites = await storage.getFavorites();
@@ -186,90 +241,17 @@ function TVShowDetail({ initialSeason }) {
     }
     
     storage.saveFavorites(updatedFavorites);
-    
-    window.dispatchEvent(new CustomEvent('favoritesChanged', { 
-      detail: { favorites: updatedFavorites } 
+    toast(isFavoriteShow ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
+      { icon: isFavoriteShow ? '💔' : '🧡' }
+    );
+    window.dispatchEvent(new CustomEvent('favoritesChanged', {
+      detail: { favorites: updatedFavorites }
     }));
   };
 
   // ============================================
   // 📺 GESTIONE EPISODI
   // ============================================
-  const loadWatchingData = async () => {
-    // Carica episodi visti
-    const watched = await storage.getWatchedEpisodes(id) || [];
-    setWatchedEpisodes(watched);
-    
-    // Carica "continua a guardare"
-    const continueData = await storage.getContinueWatching(id);
-    setContinueWatching(continueData);
-    
-    console.log('📊 Dati visione caricati:', {
-      episodiVisti: watched.length,
-      continuaAGuardare: continueData
-    });
-  };
-
-  // 🆕 FUNZIONE: CALCOLA EPISODIO SUCCESSIVO
-  const calculateNextEpisode = async () => {
-    if (!continueWatching || seasons.length === 0) {
-      setNextEpisode(null);
-      return;
-    }
-
-    const currentSeason = continueWatching.seasonNumber;
-    const currentEpisode = continueWatching.episodeNumber;
-
-    try {
-      // Carica episodi della stagione corrente
-      const currentSeasonEpisodes = await getSeasonEpisodes(id, currentSeason);
-      
-      // Caso 1: C'è un episodio successivo nella stessa stagione
-      if (currentEpisode < currentSeasonEpisodes.length) {
-        const nextEp = currentSeasonEpisodes[currentEpisode]; // Array è 0-indexed
-        setNextEpisode({
-          seasonNumber: currentSeason,
-          episodeNumber: currentEpisode + 1,
-          episodeTitle: nextEp.name,
-          exists: true
-        });
-        console.log('✅ Episodio successivo trovato:', `S${currentSeason}E${currentEpisode + 1} - ${nextEp.name}`);
-        return;
-      }
-
-      // Caso 2: Episodio corrente è l'ultimo della stagione
-      // Controlla se c'è una stagione successiva
-      const nextSeasonNumber = currentSeason + 1;
-      const nextSeasonExists = seasons.find(s => s.season_number === nextSeasonNumber);
-
-      if (nextSeasonExists) {
-        // C'è una stagione successiva, carica primo episodio
-        const nextSeasonEpisodes = await getSeasonEpisodes(id, nextSeasonNumber);
-        if (nextSeasonEpisodes.length > 0) {
-          const firstEp = nextSeasonEpisodes[0];
-          setNextEpisode({
-            seasonNumber: nextSeasonNumber,
-            episodeNumber: 1,
-            episodeTitle: firstEp.name,
-            exists: true
-          });
-          console.log('✅ Prima ep stagione successiva:', `S${nextSeasonNumber}E1 - ${firstEp.name}`);
-          return;
-        }
-      }
-
-      // Caso 3: Serie finita
-      setNextEpisode({
-        exists: false,
-        seriesCompleted: true
-      });
-      console.log('🏁 Serie completata! Nessun episodio successivo.');
-
-    } catch (error) {
-      console.error('❌ Errore calcolo episodio successivo:', error);
-      setNextEpisode(null);
-    }
-  };
 
   const handleSeasonChange = async (seasonNumber) => {
     setSelectedSeason(seasonNumber);
@@ -346,20 +328,61 @@ function TVShowDetail({ initialSeason }) {
     playFromBeginning();
   };
 
-  const markAsWatched = (episode, e) => {
+  // Avanza continueWatching all'episodio successivo (o lo azzera se è l'ultimo)
+  const advanceContinueWatching = useCallback(async (seasonNum, episodeNum) => {
+    const nextEpNum = episodeNum + 1;
+    const nextInSeason = episodes.find(e => e.episode_number === nextEpNum);
+
+    if (nextInSeason) {
+      const newCont = {
+        seasonNumber: seasonNum, episodeNumber: nextEpNum,
+        episodeTitle: nextInSeason.name, timestamp: Date.now(), watchTime: 0,
+      };
+      await storage.saveContinueWatching(id, newCont);
+      setContinueWatching(newCont);
+    } else {
+      // Ultimo episodio della stagione corrente — azzera
+      await storage.saveContinueWatching(id, null);
+      setContinueWatching(null);
+    }
+  }, [id, episodes]);
+
+  const markAsWatched = async (episode, e) => {
     e.stopPropagation();
-    
-    const episodeKey = `S${selectedSeason}E${episode.episode_number}`;
+    const episodeKey    = `S${selectedSeason}E${episode.episode_number}`;
     const currentWatched = [...watchedEpisodes];
-    
+
     if (currentWatched.includes(episodeKey)) {
+      // Deselect
       const updated = currentWatched.filter(ep => ep !== episodeKey);
       setWatchedEpisodes(updated);
-      storage.saveWatchedEpisodes(id, updated);
+      await storage.saveWatchedEpisodes(id, updated);
     } else {
+      // Marca come visto
       const updated = [...currentWatched, episodeKey];
       setWatchedEpisodes(updated);
-      storage.saveWatchedEpisodes(id, updated);
+      await storage.saveWatchedEpisodes(id, updated);
+
+      // Sincronizza continueWatching se puntava a questo episodio
+      if (continueWatching?.seasonNumber === selectedSeason &&
+          continueWatching?.episodeNumber === episode.episode_number) {
+        await advanceContinueWatching(selectedSeason, episode.episode_number);
+      }
+    }
+  };
+
+  // Marca tutti gli episodi della stagione corrente come visti
+  const markSeasonAsWatched = async () => {
+    const seasonKeys = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
+    const existing   = await storage.getWatchedEpisodes(id) || [];
+    const allMarked  = [...new Set([...existing, ...seasonKeys])];
+    await storage.saveWatchedEpisodes(id, allMarked);
+    setWatchedEpisodes(allMarked);
+
+    // Se continueWatching era in questa stagione, azzera
+    if (continueWatching?.seasonNumber === selectedSeason) {
+      await storage.saveContinueWatching(id, null);
+      setContinueWatching(null);
     }
   };
 
@@ -385,23 +408,20 @@ function TVShowDetail({ initialSeason }) {
     return releaseDate > now;
   };
 
-  // 🆕 HELPER: Formatta l'anno dalla data
   const getSeasonYear = (airDate) => {
     if (!airDate) return '';
     return new Date(airDate).getFullYear();
   };
 
+  const isContinuingEpisode = (episode) =>
+    continueWatching &&
+    continueWatching.seasonNumber === selectedSeason &&
+    continueWatching.episodeNumber === episode.episode_number;
+
   // ============================================
   // 🎬 RENDERING
   // ============================================
-  if (loading) {
-    return (
-      <div className="tv-detail-loading">
-        <div className="loading-spinner"></div>
-        <p>Caricamento dettagli serie TV...</p>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonDetail />;
 
 
   // 🆕 MODIFICATO: Non mostrare errore se sta caricando o dati non pronti
@@ -418,14 +438,7 @@ function TVShowDetail({ initialSeason }) {
   }
 
   // 🆕 Se showDetails è null ma non stiamo caricando, mostra loading
-  if (!showDetails) {
-    return (
-      <div className="tv-detail-loading">
-        <div className="loading-spinner"></div>
-        <p>Caricamento...</p>
-      </div>
-    );
-  }
+  if (!showDetails) return <SkeletonDetail />;
 
   // 💥 Trova il creatore della serie
   const creator = crew.find(member => member.job === 'Creator');
@@ -449,7 +462,8 @@ function TVShowDetail({ initialSeason }) {
             {/* Metadata Inline */}
             <div className="tv-metadata-inline">
               <span className="metadata-rating">
-                ⭐ {showDetails.vote_average?.toFixed(1)}
+                <Star size={14} fill="currentColor" style={{ color: '#feca57', verticalAlign: 'middle' }} />
+                {' '}{showDetails.vote_average?.toFixed(1)}
               </span>
               <span className="metadata-separator">•</span>
               <span className="metadata-year">
@@ -496,14 +510,9 @@ function TVShowDetail({ initialSeason }) {
               
               {/* SCENARIO 1: Mai visto nulla → Solo "Riproduci" */}
               {!continueWatching && (
-                <button 
-                  className="btn btn-primary btn-lg"
-                  onClick={playFromBeginning}
-                >
-                  <span className="btn-icon">▶️</span>
-                      <div className="btn-text">
-                        <div>Riproduci</div>
-                      </div>
+                <button className="btn btn-primary btn-lg" onClick={playFromBeginning}>
+                  <Play size={18} fill="currentColor" />
+                  <div className="btn-text"><div>Riproduci</div></div>
                 </button>
               )}
 
@@ -511,52 +520,35 @@ function TVShowDetail({ initialSeason }) {
               {continueWatching && (
                 <>
                   {/* Bottone "Continua" - SEMPRE presente se c'è continueWatching */}
-                  <button 
-                    className="btn btn-primary btn-lg"
-                    onClick={handleContinueWatching}
-                  >
-                    <span className="btn-icon">▶️</span>
-                    <div className="btn-text">
-                      <div>Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}</div>
-                    </div>
+                  <button className="btn btn-primary btn-lg" onClick={handleContinueWatching}>
+                    <Play size={18} fill="currentColor" />
+                    <div className="btn-text"><div>Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}</div></div>
                   </button>
 
-                  {/* SCENARIO 2: C'è episodio successivo → "Episodio Successivo" */}
                   {nextEpisode && nextEpisode.exists && (
-                    <button 
-                      className="btn btn-secondary btn-lg"
-                      onClick={handlePlayNextEpisode}
-                    >
-                      <span className="btn-icon">⏭️</span>
-                      <div className="btn-text">
-                        <div>Episodio Successivo S{nextEpisode.seasonNumber}E{nextEpisode.episodeNumber}</div>
-                      </div>
+                    <button className="btn btn-secondary btn-lg" onClick={handlePlayNextEpisode}>
+                      <SkipForward size={18} />
+                      <div className="btn-text"><div>Episodio Successivo S{nextEpisode.seasonNumber}E{nextEpisode.episodeNumber}</div></div>
                     </button>
                   )}
 
-                  {/* SCENARIO 3: Serie finita → "Riguarda dall'Inizio" */}
                   {nextEpisode && nextEpisode.seriesCompleted && (
-                    <button 
-                      className="btn btn-secondary btn-lg"
-                      onClick={handleRestartSeries}
-                    >
-                      <span className="btn-icon">🔄</span>
-                      <div className="btn-text">
-                        <div>Riguarda dall'Inizio</div>
-                      </div>
+                    <button className="btn btn-secondary btn-lg" onClick={handleRestartSeries}>
+                      <RefreshCw size={18} />
+                      <div className="btn-text"><div>Riguarda dall'Inizio</div></div>
                     </button>
                   )}
                 </>
               )}
               
               {/* 🆕 Bottone Preferiti - SOLO ICONA */}
-              <button 
+              <button
                 className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteShow ? 'remove' : ''}`}
                 onClick={toggleFavorites}
                 title={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <span className="btn-icon">{isFavoriteShow ? '🧡' : '🤍'}</span>
+                <Heart size={18} fill={isFavoriteShow ? 'currentColor' : 'none'} />
                 <span className="btn-text">
                   {isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 </span>
@@ -572,28 +564,17 @@ function TVShowDetail({ initialSeason }) {
           ======================================== */}
       <div className="tv-tabs-container">
         <div className="tv-tabs">
-          <button 
-            className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('episodes')}
-          >
-            📺 Episodi
+          <button className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`} onClick={() => setActiveTab('episodes')}>
+            <List size={15} /> Episodi
           </button>
-          
           {cast.length > 0 && (
-            <button 
-              className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`}
-              onClick={() => setActiveTab('cast')}
-            >
-              👥 Cast
+            <button className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`} onClick={() => setActiveTab('cast')}>
+              <Users size={15} /> Cast
             </button>
           )}
-          
           {recommendations.length > 0 && (
-            <button 
-              className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`}
-              onClick={() => setActiveTab('similar')}
-            >
-              📺 Serie Simili
+            <button className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`} onClick={() => setActiveTab('similar')}>
+              <Film size={15} /> Serie Simili
             </button>
           )}
         </div>
@@ -608,120 +589,112 @@ function TVShowDetail({ initialSeason }) {
         {activeTab === 'episodes' && (
           <div className="tab-panel tab-episodes">
             
-            {/* SELEZIONE STAGIONI */}
-            <div className="season-selector-styled">
-              <div className="section-title-wrapper">
-                <h2 className="section-title">Episodi</h2>
-                
+            {/* SELEZIONE STAGIONI — pill orizzontali */}
+            <div className="season-pills-bar">
+              <div className="season-pills-scroll">
+                {seasons.map(season => {
+                  const isActive   = selectedSeason === season.season_number;
+                  const isNew      = isNewSeason(season.air_date);
+                  const isUpcoming = isUpcomingSeason(season.air_date);
+                  return (
+                    <button
+                      key={season.season_number}
+                      className={`season-pill ${isActive ? 'active' : ''}`}
+                      onClick={() => handleSeasonChange(season.season_number)}
+                    >
+                      Stagione {season.season_number}
+                      {isNew      && <span className="season-pill-dot season-dot-new" />}
+                      {isUpcoming && <span className="season-pill-dot season-dot-upcoming" />}
+                    </button>
+                  );
+                })}
               </div>
-              
-              <div className="season-dropdown-wrapper">
-                <select 
-                  value={selectedSeason} 
-                  onChange={(e) => handleSeasonChange(parseInt(e.target.value))}
-                  className="season-dropdown"
-                >
-                  {seasons.map(season => {
-                    const year = getSeasonYear(season.air_date);
-                    const isNew = isNewSeason(season.air_date);
-                    const isUpcoming = isUpcomingSeason(season.air_date);
-                    
-                    let label = `Stagione ${season.season_number}`;
-                    
-                    // Aggiungi anno se disponibile
-                    if (year) {
-                      label += ` (${year}`;
-                    } else {
-                      label += ` (`;
-                    }
-                    
-                    // Aggiungi numero episodi
-                    label += ` • ${season.episode_count} episod${season.episode_count === 1 ? 'io' : 'i'}`;
-                    
-                    // Chiudi parentesi
-                    label += ')';
-                    
-                    // Aggiungi badge
-                    if (isUpcoming) {
-                      label += ' 📅 IN ARRIVO';
-                    } else if (isNew) {
-                      label += '';
-                    }
-                    
-                    return (
-                      <option key={season.season_number} value={season.season_number}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {selectedSeason && seasons.find(s => s.season_number === selectedSeason) && (
-                  <>
-                    {isNewSeason(seasons.find(s => s.season_number === selectedSeason).air_date) && (
-                      <span className="season-badge season-badge-new">🆕 NUOVA</span>
+              {seasons.find(s => s.season_number === selectedSeason) && (
+                <div className="season-meta-row">
+                  <p className="season-meta">
+                    {episodes.length} episod{episodes.length === 1 ? 'io' : 'i'}
+                    {getSeasonYear(seasons.find(s => s.season_number === selectedSeason)?.air_date)
+                      ? ` · ${getSeasonYear(seasons.find(s => s.season_number === selectedSeason).air_date)}`
+                      : ''}
+                    {isNewSeason(seasons.find(s => s.season_number === selectedSeason)?.air_date) && (
+                      <span className="season-meta-badge new">Nuova</span>
                     )}
-                    {isUpcomingSeason(seasons.find(s => s.season_number === selectedSeason).air_date) && (
-                      <span className="season-badge season-badge-upcoming">📅 IN ARRIVO</span>
+                    {isUpcomingSeason(seasons.find(s => s.season_number === selectedSeason)?.air_date) && (
+                      <span className="season-meta-badge upcoming">In arrivo</span>
                     )}
-                  </>
-                )}
+                  </p>
+                  {episodes.length > 0 && (
+                    <button className="mark-season-btn" onClick={markSeasonAsWatched}>
+                      <Check size={12} />
+                      Segna tutti come visti
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* GRID EPISODI */}
-            <div className="episodes-grid">
-              {episodes.map((episode, index) => (
-                <div 
-                  key={episode.id} 
-                  className={`episode-card ${isEpisodeWatched(episode) ? 'watched' : ''}`}
-                  onClick={() => playEpisode(episode)}
-                >
-                  <div className="episode-number">{episode.episode_number}</div>
-                  
-                  <div className="episode-thumbnail">
-                    <SmartImage
-                      src={getEpisodeImageUrl(episode.still_path)}
-                      alt={episode.name}
-                      title={episode.name}
-                      type="backdrop"
-                      className="episode-thumbnail-image"
-                    />
-                    <div className="episode-play-overlay">
-                      <button className="episode-play-btn">▶️</button>
+            {/* LISTA EPISODI — layout orizzontale */}
+            <div className="episodes-list">
+              {episodes.map(episode => {
+                const watched  = isEpisodeWatched(episode);
+                const current  = isContinuingEpisode(episode);
+                return (
+                  <div
+                    key={episode.id}
+                    className={`episode-row${watched ? ' is-watched' : ''}${current ? ' is-current' : ''}`}
+                    onClick={() => playEpisode(episode)}
+                  >
+                    {/* Thumbnail */}
+                    <div className="ep-thumb">
+                      <SmartImage
+                        src={getEpisodeImageUrl(episode.still_path)}
+                        alt={episode.name}
+                        title={episode.name}
+                        type="backdrop"
+                        className="ep-thumb-img"
+                      />
+                      <div className="ep-play-overlay">
+                        <div className="ep-play-circle">
+                          <Play size={22} fill="currentColor" />
+                        </div>
+                      </div>
+                      {watched && (
+                        <div className="ep-watched-badge">
+                          <Check size={11} strokeWidth={3} />
+                        </div>
+                      )}
+                      {current && !watched && (
+                        <div className="ep-continue-bar" />
+                      )}
                     </div>
-                    
-                    {isEpisodeWatched(episode) && (
-                      <div className="watched-indicator">✓</div>
-                    )}
+
+                    {/* Info */}
+                    <div className="ep-info">
+                      <div className="ep-header">
+                        <span className="ep-number">E{episode.episode_number}</span>
+                        <h3 className="ep-title">{episode.name}</h3>
+                        <span className="ep-runtime">{episode.runtime || 45} min</span>
+                      </div>
+                      {episode.overview && (
+                        <p className="ep-overview">{episode.overview}</p>
+                      )}
+                      <div className="ep-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          className={`ep-watched-btn${watched ? ' active' : ''}`}
+                          onClick={e => markAsWatched(episode, e)}
+                        >
+                          {watched ? <><Check size={13} /> Visto</> : <><Eye size={13} /> Segna come visto</>}
+                        </button>
+                        {current && (
+                          <span className="ep-in-progress">
+                            <Play size={10} fill="currentColor" /> In corso
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="episode-info">
-                    <h3 className="episode-title">{episode.name}</h3>
-                    <p className="episode-runtime">{episode.runtime || 45} min</p>
-                    
-                    {/* Descrizione Espandibile */}
-                    <ExpandableText
-                      text={episode.overview}
-                      maxLength={120}
-                      className="episode-overview"
-                      expandText="Leggi tutto"
-                      collapseText="Riduci"
-                    />
-                    
-                    {/* Bottone "Segna come visto" */}
-                    <button 
-                      className={`btn btn-episode ${isEpisodeWatched(episode) ? 'watched' : ''}`}
-                      onClick={(e) => markAsWatched(episode, e)}
-                    >
-                      <span className="btn-icon">{isEpisodeWatched(episode) ? '✅' : '👁️'}</span>
-                      <span className="btn-text">
-                        {isEpisodeWatched(episode) ? 'Visto' : 'Segna come visto'}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -741,7 +714,7 @@ function TVShowDetail({ initialSeason }) {
                       />
                     ) : (
                       <div className="cast-photo-placeholder">
-                        <span>👤</span>
+                        <User size={32} />
                       </div>
                     )}
                   </div>
@@ -758,8 +731,8 @@ function TVShowDetail({ initialSeason }) {
         {/* === SIMILAR TV SHOWS TAB === */}
         {activeTab === 'similar' && recommendations.length > 0 && (
           <div className="tab-panel tab-similar">
-            <MovieCarousel 
-              title="📺 Serie TV Simili"
+            <MovieCarousel
+              title="Serie TV Simili"
               items={recommendations}
               type="tv"
             />

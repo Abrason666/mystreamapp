@@ -1,362 +1,304 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTVDetails, getSeasonEpisodes } from '../services/tmdbApi';
 import './VixSrcPlayer.css';
 import storage from '../services/storage';
+import { ChevronLeft, SkipBack, SkipForward } from 'lucide-react';
 
 function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
-  const iframeRef = useRef(null);
   const navigate = useNavigate();
-  const [hasNextEpisode, setHasNextEpisode] = useState(false);
-  const [hasPrevEpisode, setHasPrevEpisode] = useState(false);
-  const [watchStartTime, setWatchStartTime] = useState(Date.now());
-  const [currentEpisodeTitle, setCurrentEpisodeTitle] = useState(''); // 🆕 Titolo episodio corrente
 
+  const [hasNextEpisode, setHasNextEpisode]           = useState(false);
+  const [hasPrevEpisode, setHasPrevEpisode]           = useState(false);
+  const [watchStartTime, setWatchStartTime]           = useState(Date.now());
+  const [currentEpisodeTitle, setCurrentEpisodeTitle] = useState('');
+  const [seriesTitle, setSeriesTitle]                 = useState('');
+  const [playerLoading, setPlayerLoading]             = useState(true);
+
+  // Refs stabili per l'auto-mark (non causano re-render)
+  const episodeRuntimeRef = useRef(0);   // minuti, da TMDB
+  const autoMarkedRef     = useRef(false); // evita doppio mark per stesso episodio
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape')                        goBackToEpisodes();
+      if (e.key === 'ArrowRight' && hasNextEpisode)  goToNextEpisode();
+      if (e.key === 'ArrowLeft'  && hasPrevEpisode)  goToPreviousEpisode();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNextEpisode, hasPrevEpisode]);
+
+  // ── URL player ────────────────────────────────────────────────────────────
   const getVixSrcUrl = () => {
-    let baseUrl = 'https://vixsrc.to/';
-    
-    if (type === 'movie') {
-      baseUrl += `movie/${tmdbId}`;
-    } else if (type === 'tv') {
-      baseUrl += `tv/${tmdbId}/${season}/${episode}`;
-    }
-    
-    // Parametri per forzare qualità alta
+    let base = 'https://vixsrc.to/';
+    if (type === 'movie') base += `movie/${tmdbId}`;
+    else if (type === 'tv') base += `tv/${tmdbId}/${season}/${episode}`;
+
     const params = new URLSearchParams({
-      primaryColor: 'ff6b6b',
+      primaryColor: 'ff6b35',
       secondaryColor: 'feca57',
       autoplay: 'false',
       lang: 'it',
       quality: '1080p',
       preferHD: 'true',
-      autoQuality: 'false'
+      autoQuality: 'false',
     });
-    
-    return `${baseUrl}?${params.toString()}`;
+    return `${base}?${params}`;
   };
 
-  // 🆕 CARICA TITOLO EPISODIO VERO da TMDB
+  // ── Funzioni dati ─────────────────────────────────────────────────────────
+
+  // Auto-mark: chiamata al massimo una volta per episodio
+  const autoMarkWatched = useCallback(async () => {
+    if (autoMarkedRef.current) return;
+    autoMarkedRef.current = true;
+
+    const epKey  = `S${season}E${episode}`;
+    const watched = await storage.getWatchedEpisodes(tmdbId) || [];
+    if (watched.includes(epKey)) return;
+
+    await storage.saveWatchedEpisodes(tmdbId, [...watched, epKey]);
+
+    // Sincronizza continueWatching: se puntava a questo episodio, azzera
+    const cont = await storage.getContinueWatching(tmdbId);
+    if (cont?.seasonNumber === parseInt(season) && cont?.episodeNumber === parseInt(episode)) {
+      await storage.saveContinueWatching(tmdbId, null);
+    }
+  }, [tmdbId, season, episode]);
+
+  // Reset del flag quando l'utente cambia episodio
+  useEffect(() => {
+    autoMarkedRef.current = false;
+    episodeRuntimeRef.current = 0;
+  }, [season, episode]);
+
+  const saveContinueWatching = useCallback(() => {
+    const watchTime = Math.floor((Date.now() - watchStartTime) / 1000);
+    if (watchTime > 60) {
+      storage.saveContinueWatching(tmdbId, {
+        seasonNumber:  parseInt(season),
+        episodeNumber: parseInt(episode),
+        episodeTitle:  currentEpisodeTitle || `Episodio ${episode}`,
+        watchTime,
+        timestamp:     Date.now(),
+        lastWatched:   new Date().toISOString(),
+      });
+
+      // Verifica soglia auto-mark: max(2 min, 80% del runtime)
+      const runtime  = episodeRuntimeRef.current; // minuti
+      const threshold = Math.max(120, runtime > 0 ? runtime * 60 * 0.8 : 120);
+      if (watchTime >= threshold) {
+        autoMarkWatched();
+      }
+    }
+  }, [season, episode, watchStartTime, currentEpisodeTitle, tmdbId, autoMarkWatched]);
+
+  const loadEpisodeTitle = useCallback(async () => {
+    try {
+      const eps     = await getSeasonEpisodes(tmdbId, parseInt(season));
+      const current = eps.find(ep => ep.episode_number === parseInt(episode));
+      const epTitle = current?.name || `Episodio ${episode}`;
+      setCurrentEpisodeTitle(epTitle);
+      if (current?.runtime) episodeRuntimeRef.current = current.runtime;
+      await storage.saveContinueWatching(tmdbId, {
+        seasonNumber:  parseInt(season),
+        episodeNumber: parseInt(episode),
+        episodeTitle:  epTitle,
+        timestamp:     Date.now(),
+        watchTime:     0,
+      });
+    } catch {
+      setCurrentEpisodeTitle(`Episodio ${episode}`);
+    }
+  }, [tmdbId, season, episode]);
+
+  const loadEpisodeNavigation = useCallback(async () => {
+    try {
+      const details          = await getTVDetails(tmdbId);
+      setSeriesTitle(details.name || '');
+      const sNum             = parseInt(season);
+      const eNum             = parseInt(episode);
+      const currentSeasonEps = await getSeasonEpisodes(tmdbId, sNum);
+
+      let prevExists = eNum > 1;
+      if (!prevExists && sNum > 1) {
+        try { prevExists = (await getSeasonEpisodes(tmdbId, sNum - 1)).length > 0; } catch { /**/ }
+      }
+
+      let nextExists = eNum < currentSeasonEps.length;
+      if (!nextExists && sNum < details.number_of_seasons) {
+        try { nextExists = (await getSeasonEpisodes(tmdbId, sNum + 1)).length > 0; } catch { /**/ }
+      }
+
+      setHasPrevEpisode(prevExists);
+      setHasNextEpisode(nextExists);
+    } catch { /**/ }
+  }, [tmdbId, season, episode]);
+
   useEffect(() => {
     if (type === 'tv' && season && episode) {
       loadEpisodeTitle();
       loadEpisodeNavigation();
       setWatchStartTime(Date.now());
     }
-  }, [tmdbId, season, episode, type]);
+  }, [tmdbId, season, episode, type, loadEpisodeTitle, loadEpisodeNavigation]);
 
-  // 🆕 FUNZIONE: Carica titolo episodio vero
-  const loadEpisodeTitle = async () => {
-    try {
-      const seasonEpisodes = await getSeasonEpisodes(tmdbId, parseInt(season));
-      const currentEpisode = seasonEpisodes.find(ep => ep.episode_number === parseInt(episode));
-      
-      if (currentEpisode) {
-        setCurrentEpisodeTitle(currentEpisode.name);
-        console.log(`✅ Titolo episodio caricato: "${currentEpisode.name}"`);
-        
-        // 🆕 SALVA SUBITO con titolo vero (quando inizi a guardare)
-        const continueData = {
-          seasonNumber: parseInt(season),
-          episodeNumber: parseInt(episode),
-          episodeTitle: currentEpisode.name, // 👈 TITOLO VERO!
-          timestamp: Date.now(),
-          watchTime: 0
-        };
-        await storage.saveContinueWatching(tmdbId, continueData);
-        console.log(`💾 ContinueWatching salvato: S${season}E${episode} - "${currentEpisode.name}"`);
-      } else {
-        console.warn('⚠️ Episodio non trovato, uso titolo generico');
-        setCurrentEpisodeTitle(`Episodio ${episode}`);
-      }
-    } catch (error) {
-      console.error('❌ Errore caricamento titolo episodio:', error);
-      setCurrentEpisodeTitle(`Episodio ${episode}`);
-    }
-  };
-
-  // Salva "continua a guardare" ogni 30 secondi
   useEffect(() => {
-    if (type === 'tv') {
-      const interval = setInterval(() => {
-        saveContinueWatching();
-      }, 30000);
+    if (type !== 'tv') return;
+    const id = setInterval(saveContinueWatching, 30000);
+    return () => clearInterval(id);
+  }, [type, saveContinueWatching]);
 
-      return () => clearInterval(interval);
-    }
-  }, [tmdbId, season, episode, type, watchStartTime, currentEpisodeTitle]);
-
-  // Salva quando l'utente esce dalla pagina
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (type === 'tv') {
-        saveContinueWatching();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && type === 'tv') {
-        saveContinueWatching();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
+    const onUnload     = () => { if (type === 'tv') saveContinueWatching(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden' && type === 'tv') saveContinueWatching(); };
+    window.addEventListener('beforeunload', onUnload);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (type === 'tv') {
-        saveContinueWatching();
-      }
+      window.removeEventListener('beforeunload', onUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (type === 'tv') saveContinueWatching();
     };
-  }, [tmdbId, season, episode, type, watchStartTime, currentEpisodeTitle]);
+  }, [type, saveContinueWatching]);
 
-  // 🔧 SALVATAGGIO CON TITOLO VERO
-  const saveContinueWatching = () => {
-    const watchTime = Math.floor((Date.now() - watchStartTime) / 1000);
-    
-    if (watchTime > 60) {
-      const continueData = {
-        seasonNumber: parseInt(season),
-        episodeNumber: parseInt(episode),
-        episodeTitle: currentEpisodeTitle || `Episodio ${episode}`, // 👈 USA TITOLO VERO
-        watchTime: watchTime,
-        timestamp: Date.now(),
-        lastWatched: new Date().toISOString()
-      };
-      
-      storage.saveContinueWatching(tmdbId, continueData);
-      console.log(`💾 Auto-save: S${season}E${episode} - "${currentEpisodeTitle}" (${Math.floor(watchTime/60)}m guardati)`);
-    }
-  };
-
-  const loadEpisodeNavigation = async () => {
-    try {
-      const seriesDetails = await getTVDetails(tmdbId);
-      const currentSeasonNum = parseInt(season);
-      const currentEpisodeNum = parseInt(episode);
-      
-      const currentSeasonEpisodes = await getSeasonEpisodes(tmdbId, currentSeasonNum);
-      
-      // Controlla episodio precedente
-      let prevExists = false;
-      if (currentEpisodeNum > 1) {
-        prevExists = true;
-      } else if (currentSeasonNum > 1) {
-        try {
-          const prevSeasonEpisodes = await getSeasonEpisodes(tmdbId, currentSeasonNum - 1);
-          prevExists = prevSeasonEpisodes.length > 0;
-        } catch (e) {
-          prevExists = false;
-        }
-      }
-      
-      // Controlla episodio successivo
-      let nextExists = false;
-      if (currentEpisodeNum < currentSeasonEpisodes.length) {
-        nextExists = true;
-      } else if (currentSeasonNum < seriesDetails.number_of_seasons) {
-        try {
-          const nextSeasonEpisodes = await getSeasonEpisodes(tmdbId, currentSeasonNum + 1);
-          nextExists = nextSeasonEpisodes.length > 0;
-        } catch (e) {
-          nextExists = false;
-        }
-      }
-      
-      setHasPrevEpisode(prevExists);
-      setHasNextEpisode(nextExists);
-      
-    } catch (error) {
-      console.error('Errore caricamento navigazione episodi:', error);
-    }
-  };
-
+  // ── Navigazione ───────────────────────────────────────────────────────────
   const goBackToEpisodes = () => {
-    if (type === 'tv') {
-      saveContinueWatching();
-    }
-    
-    if (type === 'tv') {
-      // Usa il nuovo routing con parametro stagione
-      navigate(`/tv/${tmdbId}/season/${season}`);
-    } else {
-      navigate('/');
-    }
+    if (type === 'tv') saveContinueWatching();
+    navigate(type === 'tv' ? `/tv/${tmdbId}/season/${season}` : '/');
   };
 
-  // 🔧 NAVIGAZIONE EPISODIO PRECEDENTE - con titolo vero
   const goToPreviousEpisode = async () => {
-    const currentSeasonNum = parseInt(season);
-    const currentEpisodeNum = parseInt(episode);
-    
+    const sNum = parseInt(season);
+    const eNum = parseInt(episode);
     try {
-      if (currentEpisodeNum > 1) {
-        // Vai all'episodio precedente nella stessa stagione
-        const prevEpisodeNum = currentEpisodeNum - 1;
-        
-        // 🆕 CARICA TITOLO VERO prima di salvare
-        const seasonEpisodes = await getSeasonEpisodes(tmdbId, currentSeasonNum);
-        const prevEpisode = seasonEpisodes.find(ep => ep.episode_number === prevEpisodeNum);
-        
-        const continueData = {
-          seasonNumber: currentSeasonNum,
-          episodeNumber: prevEpisodeNum,
-          episodeTitle: prevEpisode?.name || `Episodio ${prevEpisodeNum}`, // 👈 TITOLO VERO
-          timestamp: Date.now(),
-          watchTime: 0
-        };
-        await storage.saveContinueWatching(tmdbId, continueData);
-        console.log(`💾 Salvato episodio precedente: S${currentSeasonNum}E${prevEpisodeNum} - "${prevEpisode?.name}"`);
-        
-        navigate(`/player/tv/${tmdbId}/${currentSeasonNum}/${prevEpisodeNum}`);
-        
-      } else if (currentSeasonNum > 1) {
-        // Vai all'ultimo episodio della stagione precedente
-        const prevSeasonNum = currentSeasonNum - 1;
-        const prevSeasonEpisodes = await getSeasonEpisodes(tmdbId, prevSeasonNum);
-        
-        if (prevSeasonEpisodes.length > 0) {
-          const lastEpisodeNum = prevSeasonEpisodes.length;
-          const lastEpisode = prevSeasonEpisodes[lastEpisodeNum - 1];
-          
-          const continueData = {
-            seasonNumber: prevSeasonNum,
-            episodeNumber: lastEpisodeNum,
-            episodeTitle: lastEpisode?.name || `Episodio ${lastEpisodeNum}`, // 👈 TITOLO VERO
-            timestamp: Date.now(),
-            watchTime: 0
-          };
-          await storage.saveContinueWatching(tmdbId, continueData);
-          console.log(`💾 Salvato stagione precedente: S${prevSeasonNum}E${lastEpisodeNum} - "${lastEpisode?.name}"`);
-          
-          navigate(`/player/tv/${tmdbId}/${prevSeasonNum}/${lastEpisodeNum}`);
+      if (eNum > 1) {
+        const eps  = await getSeasonEpisodes(tmdbId, sNum);
+        const prev = eps.find(e => e.episode_number === eNum - 1);
+        await storage.saveContinueWatching(tmdbId, {
+          seasonNumber: sNum, episodeNumber: eNum - 1,
+          episodeTitle: prev?.name || `Episodio ${eNum - 1}`,
+          timestamp: Date.now(), watchTime: 0,
+        });
+        navigate(`/player/tv/${tmdbId}/${sNum}/${eNum - 1}`);
+      } else if (sNum > 1) {
+        const prevEps = await getSeasonEpisodes(tmdbId, sNum - 1);
+        if (prevEps.length > 0) {
+          const last = prevEps[prevEps.length - 1];
+          await storage.saveContinueWatching(tmdbId, {
+            seasonNumber: sNum - 1, episodeNumber: last.episode_number,
+            episodeTitle: last.name, timestamp: Date.now(), watchTime: 0,
+          });
+          navigate(`/player/tv/${tmdbId}/${sNum - 1}/${last.episode_number}`);
         }
       }
-    } catch (error) {
-      console.error('❌ Errore navigazione episodio precedente:', error);
-    }
+    } catch { /**/ }
   };
 
-  // 🔧 NAVIGAZIONE EPISODIO SUCCESSIVO - con titolo vero
   const goToNextEpisode = async () => {
-    // Marca episodio corrente come visto
-    const episodeKey = `S${season}E${episode}`;
-    const watchedEpisodes = await storage.getWatchedEpisodes(tmdbId) || [];
-    if (!watchedEpisodes.includes(episodeKey)) {
-      watchedEpisodes.push(episodeKey);
-      await storage.saveWatchedEpisodes(tmdbId, watchedEpisodes);
+    const epKey = `S${season}E${episode}`;
+    const watched = await storage.getWatchedEpisodes(tmdbId) || [];
+    if (!watched.includes(epKey)) {
+      await storage.saveWatchedEpisodes(tmdbId, [...watched, epKey]);
     }
-    
-    const currentSeasonNum = parseInt(season);
-    const currentEpisodeNum = parseInt(episode);
-    
+    const sNum = parseInt(season);
+    const eNum = parseInt(episode);
     try {
-      const currentSeasonEpisodes = await getSeasonEpisodes(tmdbId, currentSeasonNum);
-      
-      if (currentEpisodeNum < currentSeasonEpisodes.length) {
-        // Vai all'episodio successivo nella stessa stagione
-        const nextEpisodeNum = currentEpisodeNum + 1;
-        const nextEpisode = currentSeasonEpisodes.find(ep => ep.episode_number === nextEpisodeNum);
-        
-        // 🆕 SALVA con titolo vero
-        const continueData = {
-          seasonNumber: currentSeasonNum,
-          episodeNumber: nextEpisodeNum,
-          episodeTitle: nextEpisode?.name || `Episodio ${nextEpisodeNum}`, // 👈 TITOLO VERO
-          timestamp: Date.now(),
-          watchTime: 0
-        };
-        await storage.saveContinueWatching(tmdbId, continueData);
-        console.log(`💾 Salvato nuovo episodio: S${currentSeasonNum}E${nextEpisodeNum} - "${nextEpisode?.name}"`);
-        
-        navigate(`/player/tv/${tmdbId}/${currentSeasonNum}/${nextEpisodeNum}`);
-        
+      const eps = await getSeasonEpisodes(tmdbId, sNum);
+      if (eNum < eps.length) {
+        const next = eps.find(e => e.episode_number === eNum + 1);
+        await storage.saveContinueWatching(tmdbId, {
+          seasonNumber: sNum, episodeNumber: eNum + 1,
+          episodeTitle: next?.name || `Episodio ${eNum + 1}`,
+          timestamp: Date.now(), watchTime: 0,
+        });
+        navigate(`/player/tv/${tmdbId}/${sNum}/${eNum + 1}`);
       } else {
-        // Vai alla stagione successiva, episodio 1
-        const seriesDetails = await getTVDetails(tmdbId);
-        if (currentSeasonNum < seriesDetails.number_of_seasons) {
-          const nextSeasonNum = currentSeasonNum + 1;
-          const nextSeasonEpisodes = await getSeasonEpisodes(tmdbId, nextSeasonNum);
-          
-          if (nextSeasonEpisodes.length > 0) {
-            const firstEpisode = nextSeasonEpisodes[0];
-            
-            const continueData = {
-              seasonNumber: nextSeasonNum,
-              episodeNumber: 1,
-              episodeTitle: firstEpisode?.name || 'Episodio 1', // 👈 TITOLO VERO
-              timestamp: Date.now(),
-              watchTime: 0
-            };
-            await storage.saveContinueWatching(tmdbId, continueData);
-            console.log(`💾 Salvato nuova stagione: S${nextSeasonNum}E1 - "${firstEpisode?.name}"`);
-            
-            navigate(`/player/tv/${tmdbId}/${nextSeasonNum}/1`);
+        const details = await getTVDetails(tmdbId);
+        if (sNum < details.number_of_seasons) {
+          const nextEps = await getSeasonEpisodes(tmdbId, sNum + 1);
+          if (nextEps.length > 0) {
+            const first = nextEps[0];
+            await storage.saveContinueWatching(tmdbId, {
+              seasonNumber: sNum + 1, episodeNumber: 1,
+              episodeTitle: first.name, timestamp: Date.now(), watchTime: 0,
+            });
+            navigate(`/player/tv/${tmdbId}/${sNum + 1}/1`);
           }
         }
       }
-    } catch (error) {
-      console.error('❌ Errore navigazione episodio successivo:', error);
-    }
+    } catch { /**/ }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="vixsrc-player">
-      {/* Header con titolo episodio */}
-      <div className="player-header">
-        {type === 'tv' ? (
-          <>
-            <h2>{currentEpisodeTitle}</h2>
-          </>
-        ) : (
-          <h2>{title}</h2>
+    <div className="player-wrapper">
+
+      {/* TOP BAR */}
+      <div className="player-top-bar">
+        <button className="player-back-btn" onClick={goBackToEpisodes}>
+          <ChevronLeft size={22} />
+          <span>Indietro</span>
+        </button>
+
+        <div className="player-divider" />
+
+        <div className="player-title-block">
+          {type === 'tv' && seriesTitle && (
+            <span className="player-series-name">{seriesTitle}</span>
+          )}
+          {type === 'tv' && seriesTitle && <span className="player-series-name">·</span>}
+          {type === 'tv' && (
+            <span className="player-ep-tag">S{season}E{episode}</span>
+          )}
+          <span className="player-ep-title">
+            {type === 'tv' ? currentEpisodeTitle : title}
+          </span>
+        </div>
+
+        {type === 'tv' && (
+          <div className="player-episode-nav">
+            <button
+              className="player-nav-btn"
+              onClick={goToPreviousEpisode}
+              disabled={!hasPrevEpisode}
+              title="Episodio precedente (←)"
+            >
+              <SkipBack size={18} />
+              <span>Precedente</span>
+            </button>
+            <button
+              className="player-nav-btn"
+              onClick={goToNextEpisode}
+              disabled={!hasNextEpisode}
+              title="Episodio successivo (→)"
+            >
+              <span>Successivo</span>
+              <SkipForward size={18} />
+            </button>
+          </div>
         )}
       </div>
-      
-      {/* Player Container */}
-      <div className="player-container">
-        <iframe
-          ref={iframeRef}
-          src={getVixSrcUrl()}
-          width="100%"
-          height="100%"
-          frameBorder="0"
-          allowFullScreen
-          title={`Player per ${title}`}
-          onLoad={() => console.log('✅ Player caricato')}
-        />
-      </div>
-      
-      {/* Controlli di navigazione */}
-      <div className="player-controls">
-        <div className="navigation-buttons">
-          <button onClick={goBackToEpisodes} className="back-button">
-            ← Torna Indietro {type === 'tv' ? `(S${season})` : ''}
-          </button>
-          
-          {/* Controlli episodi solo per serie TV */}
-          {type === 'tv' && (
-            <div className="episode-navigation">
-              {hasPrevEpisode && (
-                <button onClick={goToPreviousEpisode} className="episode-nav-button prev">
-                  ⏮️ Episodio Precedente
-                </button>
-              )}
-              
-              {hasNextEpisode && (
-                <button onClick={goToNextEpisode} className="episode-nav-button next">
-                  Episodio Successivo ⏭️
-                </button>
-              )}
-            </div>
-          )}
+
+      {/* IFRAME — prende tutto il resto della finestra */}
+      <iframe
+        src={getVixSrcUrl()}
+        className="player-iframe"
+        frameBorder="0"
+        allowFullScreen
+        title={title}
+        onLoad={() => setPlayerLoading(false)}
+      />
+
+      {/* Loading overlay */}
+      {playerLoading && (
+        <div className="player-loading-overlay">
+          <div className="player-loading-spinner" />
+          <p className="player-loading-text">Caricamento player...</p>
         </div>
-        
-        <p className="player-info">
-          {type === 'movie' ? '🎬 Film' : `📺 S${season}E${episode}`} • Auto-Save
-        </p>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "mystreamapp",
-  "version": "1.2.2",
+  "version": "1.4.0",
   "description": "App ad uso personale",
   "author": "Abrason",
   "private": true,
@@ -19,8 +19,10 @@
     "electron-store": "^10.1.0",
     "electron-updater": "^6.6.2",
     "express": "^5.1.0",
+    "lucide-react": "^1.14.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^6.8.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
@@ -85,7 +87,6 @@
       "icon": "build/icon.ico",
       "publisherName": "Abrason",
       "certificateFile": "C:/AbrasonCert.pfx",
-      "certificatePassword": "CatStream2025!",
       "signingHashAlgorithms": [
         "sha256"
       ],

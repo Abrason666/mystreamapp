@@ -85,7 +85,6 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
       preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true,
@@ -105,6 +104,39 @@ function createWindow() {
 
   ipcMain.handle('load-data', async (event, key) => {
     return loadDataFromFile(key);
+  });
+
+  ipcMain.handle('clean-expired-cache', async () => {
+    try {
+      if (!fs.existsSync(dataFilePath)) return 0;
+      const fileContent = fs.readFileSync(dataFilePath, 'utf8');
+      const data = JSON.parse(fileContent);
+      const now = Date.now();
+      let cleaned = 0;
+
+      for (const key of Object.keys(data)) {
+        if (!key.startsWith('cache_')) continue;
+        try {
+          const entry = typeof data[key] === 'string' ? JSON.parse(data[key]) : data[key];
+          if (entry && entry.expires && now > entry.expires) {
+            delete data[key];
+            cleaned++;
+          }
+        } catch {
+          delete data[key];
+          cleaned++;
+        }
+      }
+
+      if (cleaned > 0) {
+        fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
+        log.info(`🧹 Cache pulita: ${cleaned} elementi scaduti rimossi`);
+      }
+      return cleaned;
+    } catch (error) {
+      log.error('❌ Errore pulizia cache:', error);
+      return 0;
+    }
   });
 
   ipcMain.handle('close-app', async () => {
@@ -243,6 +275,10 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    try {
+      const { destroyAutoUpdater } = require('./autoUpdater');
+      destroyAutoUpdater();
+    } catch {}
     mainWindow = null;
   });
 

@@ -98,31 +98,31 @@
 }
 
 .play-button, .favorite-button {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 50%;
   width: 40px;
   height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.15s;
 }
 
-.play-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
-.favorite-button:hover {
-  background: rgba(255, 255, 255, 0.3);
+.play-button:hover, .favorite-button:hover {
+  background: rgba(255, 255, 255, 0.35);
   transform: scale(1.1);
 }
 
 .favorite-button.active {
-  background: rgba(255, 107, 107, 0.8);
+  background: rgba(255, 107, 53, 0.75);
+}
+
+.favorite-button.active:hover {
+  background: rgba(255, 107, 53, 0.95);
 }
 
 .carousel-button {

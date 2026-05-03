@@ -374,3 +374,65 @@
 .grid-item-overlay {
   will-change: opacity;
 }
+
+/* === NUOVI BOTTONI AZIONE (Lucide) === */
+.grid-item-actions {
+  display: flex;
+  gap: 6px;
+  align-self: flex-end;
+}
+
+.grid-action-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.grid-action-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
+}
+
+.grid-action-fav {
+  background: rgba(255, 107, 53, 0.75);
+}
+
+.grid-action-fav:hover {
+  background: rgba(255, 107, 53, 0.95);
+}
+
+/* === INFINITE SCROLL === */
+.grid-loading-more {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.grid-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: grid-spin 0.8s linear infinite;
+}
+
+@keyframes grid-spin {
+  to { transform: rotate(360deg); }
+}
+
+.grid-end-label {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
