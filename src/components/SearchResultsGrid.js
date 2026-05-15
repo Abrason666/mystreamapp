@@ -5,12 +5,12 @@ import SmartImage from './SmartImage';
 import UpcomingBadge from './UpcomingBadge';
 import storage from '../services/storage';
 import { Play, Heart } from 'lucide-react';
-import toast from 'react-hot-toast';
 import './SearchResultsGrid.css';
 
 function SearchResultsGrid({ items, query, hasMore, onLoadMore, loadingMore }) {
   const navigate        = useNavigate();
   const [favorites, setFavorites] = useState([]);
+  const [pulsingId, setPulsingId] = useState(null);
   const sentinelRef     = useRef(null);
 
   useEffect(() => {
@@ -38,6 +38,11 @@ function SearchResultsGrid({ items, query, hasMore, onLoadMore, loadingMore }) {
     navigate(item.type === 'tv' ? `/tv/${item.id}` : `/movie/${item.id}`);
   };
 
+  const handlePlayClick = (item, e) => {
+    e.stopPropagation();
+    navigate(item.type === 'tv' ? `/player/tv/${item.id}/1/1` : `/player/movie/${item.id}`);
+  };
+
   const toggleFavorite = async (item, e) => {
     e.stopPropagation();
     const current  = await storage.getFavorites();
@@ -46,10 +51,10 @@ function SearchResultsGrid({ items, query, hasMore, onLoadMore, loadingMore }) {
       ? current.filter(f => !(f.id === item.id && f.type === item.type))
       : [...current, item];
     await storage.saveFavorites(updated);
-    toast(already ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
-      { icon: already ? '💔' : '🧡' });
     setFavorites(updated);
     window.dispatchEvent(new CustomEvent('favoritesChanged', { detail: { favorites: updated } }));
+    setPulsingId(item.id);
+    setTimeout(() => setPulsingId(null), 500);
   };
 
   const isFav = (item) => favorites.some(f => f.id === item.id && f.type === item.type);
@@ -102,13 +107,13 @@ function SearchResultsGrid({ items, query, hasMore, onLoadMore, loadingMore }) {
                   <div className="grid-item-actions">
                     <button
                       className="grid-action-btn"
-                      onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
-                      aria-label="Vai ai dettagli"
+                      onClick={(e) => handlePlayClick(item, e)}
+                      aria-label="Riproduci"
                     >
                       <Play size={16} fill="currentColor" />
                     </button>
                     <button
-                      className={`grid-action-btn ${fav ? 'grid-action-fav' : ''}`}
+                      className={`grid-action-btn ${fav ? 'grid-action-fav' : ''} ${pulsingId === item.id ? 'heart-pulse' : ''}`}
                       onClick={(e) => toggleFavorite(item, e)}
                       aria-label={fav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                     >

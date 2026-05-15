@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getImageUrl } from '../services/tmdbApi';
 import SmartImage from './SmartImage';
@@ -8,14 +8,29 @@ import './SmartImage.css';
 import './PlaceholderImage.css';
 import storage from '../services/storage';
 import { Play, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
-import toast from 'react-hot-toast';
-
-function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
+function MovieCarousel({ title, items, type = 'movie', onFavoritesChange, icon: Icon }) {
   const navigate = useNavigate();
   const carouselRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [localFavorites, setLocalFavorites] = useState([]);
+  const [pulsingId, setPulsingId] = useState(null);
+
+  // Precompute type map once per items change — O(1) lookup during render
+  const computedItemTypes = useMemo(() => {
+    if (type !== 'mixed') return null;
+    const map = new Map();
+    items.forEach(item => {
+      let t;
+      if      (item.media_type)                                                          t = item.media_type === 'movie' ? 'movie' : 'tv';
+      else if (item.type)                                                                t = item.type;
+      else if (item.name && item.first_air_date && !(item.title && item.release_date))  t = 'tv';
+      else if (item.title && item.release_date && !(item.name && item.first_air_date))  t = 'movie';
+      else                                                                               t = item.title ? 'movie' : 'tv';
+      map.set(item.id, t);
+    });
+    return map;
+  }, [items, type]);
 
   useEffect(() => {
     // Caricamento iniziale
@@ -58,70 +73,27 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
     }
   };
 
-  /**
-   * 🔧 FUNZIONE MIGLIORATA PER DETERMINARE IL TIPO DI CONTENUTO
-   * 
-   * Questa funzione determina se un contenuto è un film o una serie TV.
-   * Utilizza diversi metodi in ordine di affidabilità:
-   * 
-   * 1. Se il carousel ha un tipo specifico (non 'mixed'), usa quello
-   * 2. Se l'item ha il campo 'media_type' da TMDB, usa quello (più affidabile!)
-   * 3. Se l'item ha il campo 'type' già impostato, usa quello
-   * 4. Come fallback, controlla la presenza di campi specifici:
-   *    - 'name' + 'first_air_date' → Serie TV
-   *    - 'title' + 'release_date' → Film
-   */
-  const determineItemType = (item) => {
-    // Se il carousel ha un tipo non-mixed, usa quello
-    if (type !== 'mixed') {
-      return type;
-    }
-    
-    // 🎯 PRIMO: Controlla il campo media_type di TMDB (il più affidabile!)
-    if (item.media_type) {
-      console.log(`📍 Tipo da media_type: ${item.media_type} per "${item.title || item.name}"`);
-      return item.media_type === 'movie' ? 'movie' : 'tv';
-    }
-    
-    // SECONDO: Controlla se ha già un campo 'type'
-    if (item.type) {
-      console.log(`📍 Tipo da item.type: ${item.type} per "${item.title || item.name}"`);
-      return item.type;
-    }
-    
-    // 🎯 TERZO: Usa una logica più robusta basata sui campi specifici
-    // Serie TV hanno 'name' e 'first_air_date'
-    // Film hanno 'title' e 'release_date'
-    const hasSeriesFields = item.name && item.first_air_date;
-    const hasMovieFields = item.title && item.release_date;
-    
-    if (hasSeriesFields && !hasMovieFields) {
-      console.log(`📍 Rilevata Serie TV (name+first_air_date): "${item.name}"`);
-      return 'tv';
-    }
-    
-    if (hasMovieFields && !hasSeriesFields) {
-      console.log(`📍 Rilevato Film (title+release_date): "${item.title}"`);
-      return 'movie';
-    }
-    
-    // ULTIMO FALLBACK: usa il vecchio metodo (meno affidabile)
-    const fallbackType = item.title ? 'movie' : 'tv';
-    console.warn(`⚠️ Fallback usato per "${item.title || item.name}": ${fallbackType}`);
-    return fallbackType;
-  };
+  const determineItemType = useCallback((item) => {
+    if (type !== 'mixed') return type;
+    return computedItemTypes?.get(item.id) ?? (item.title ? 'movie' : 'tv');
+  }, [type, computedItemTypes]);
 
   const handleItemClick = (item) => {
-    // Usa la nuova funzione migliorata
     const itemType = determineItemType(item);
-    
-    console.log(`🎬 Click su: "${item.title || item.name}" | ID: ${item.id} | Tipo: ${itemType}`);
-    
-    // Naviga alla pagina corretta
     if (itemType === 'tv') {
       navigate(`/tv/${item.id}`);
     } else {
       navigate(`/movie/${item.id}`);
+    }
+  };
+
+  const handlePlayClick = (item, e) => {
+    e.stopPropagation();
+    const itemType = determineItemType(item);
+    if (itemType === 'tv') {
+      navigate(`/player/tv/${item.id}/1/1`);
+    } else {
+      navigate(`/player/movie/${item.id}`);
     }
   };
 
@@ -140,21 +112,15 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
     let updatedFavorites;
     
     if (isAlreadyFavorite) {
-      // Rimuovi dai favoriti
       updatedFavorites = favorites.filter(fav => !(fav.id === item.id && fav.type === itemType));
-      console.log('💔 Rimosso dai favoriti:', item.title || item.name);
     } else {
-      // Aggiungi ai favoriti
-      const favoriteItem = { ...item, type: itemType };
-      updatedFavorites = [...favorites, favoriteItem];
-      console.log('❤️ Aggiunto ai favoriti:', item.title || item.name);
+      updatedFavorites = [...favorites, { ...item, type: itemType }];
     }
     
     await storage.saveFavorites(updatedFavorites);
-    toast(isAlreadyFavorite ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
-      { icon: isAlreadyFavorite ? '💔' : '🧡' }
-    );
     setLocalFavorites(updatedFavorites);
+    setPulsingId(item.id);
+    setTimeout(() => setPulsingId(null), 500);
     
     // Notifica il parent component
     if (onFavoritesChange) {
@@ -167,16 +133,16 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
   };
 
   const isFavorite = (item) => {
-    // Usa la funzione migliorata
     const itemType = determineItemType(item);
-    
-    const result = localFavorites.some(fav => fav.id === item.id && fav.type === itemType);
-    return result;
+    return localFavorites.some(fav => fav.id === item.id && fav.type === itemType);
   };
 
   return (
     <div className="movie-carousel">
-      <h2 className="carousel-title">{title}</h2>
+      <h2 className="carousel-title">
+        {Icon && <Icon size={28} className="carousel-title-icon" />}
+        {title}
+      </h2>
       
       <div className="carousel-container">
         {canScrollLeft && (
@@ -191,9 +157,9 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
           onScroll={checkScrollButtons}
         >
           {items.map((item) => {
-            const isItemFavorite = isFavorite(item);
-            const itemType = determineItemType(item); // Per il badge "Film" o "Serie TV"
-            
+            const itemType      = determineItemType(item);
+            const isItemFavorite = localFavorites.some(fav => fav.id === item.id && fav.type === itemType);
+
             return (
               <div 
                 key={`${item.id}-${itemType}`}
@@ -236,14 +202,14 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange }) {
                     <div className="item-actions">
                       <button
                         className="play-button"
-                        onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
+                        onClick={(e) => handlePlayClick(item, e)}
                         aria-label="Riproduci"
                       >
                         <Play size={18} fill="currentColor" />
                       </button>
 
                       <button
-                        className={`favorite-button ${isItemFavorite ? 'active' : ''}`}
+                        className={`favorite-button ${isItemFavorite ? 'active' : ''} ${pulsingId === item.id ? 'heart-pulse' : ''}`}
                         onClick={(e) => addToFavorites(item, e)}
                         title={isItemFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
                         aria-label={isItemFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}

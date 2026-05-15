@@ -1,0 +1,243 @@
+/* Stile identico a MovieCarousel */
+.cw-carousel {
+  margin: 2rem 0;
+}
+
+.cw-title {
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+  padding-left: 2rem;
+  color: white;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cw-title-icon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.cw-wrapper {
+  position: relative;
+  padding: 0 2rem;
+}
+
+.cw-track {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 1rem 0.5rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.cw-track::-webkit-scrollbar { display: none; }
+
+/* ── CARD ── */
+.cw-card {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.cw-card:hover {
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+.cw-poster-wrap {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.cw-poster {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  transition: all 0.3s ease;
+}
+
+/* Play overlay */
+.cw-play-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 0%, rgba(0, 0, 0, 0.8) 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cw-card:hover .cw-play-overlay { opacity: 1; }
+
+/* Play grande — centrato con absolute */
+.cw-play-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.15s;
+  pointer-events: none;
+}
+
+.cw-card:hover .cw-play-circle {
+  background: rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+/* Rimuovi button */
+.cw-remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  backdrop-filter: blur(6px);
+}
+
+.cw-card:hover .cw-remove-btn { opacity: 1; }
+.cw-remove-btn:hover { background: rgba(220, 50, 50, 0.85); color: #fff; }
+
+/* Info + Heart — fissi in basso a destra */
+.cw-overlay-actions {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cw-action-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.cw-action-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.cw-action-btn.fav-active {
+  background: rgba(255, 107, 53, 0.75);
+}
+
+.cw-action-btn.fav-active:hover {
+  background: rgba(255, 107, 53, 0.95);
+}
+
+/* Info sotto la card */
+.cw-info {
+  padding: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.cw-series-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.cw-episode-tag {
+  font-size: 0.9rem;
+  color: var(--accent-primary);
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cw-episode-title {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ── FRECCE — identiche a .carousel-button ── */
+.cw-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 100;
+}
+
+.cw-arrow:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.cw-arrow.left  { left: 0.5rem; }
+.cw-arrow.right { right: 0.5rem; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .cw-title {
+    font-size: 1.5rem;
+    padding-left: 1rem;
+  }
+
+  .cw-wrapper { padding: 0 1rem; }
+
+  .cw-card { min-width: 150px; }
+
+  .cw-poster { height: 225px; }
+
+  .cw-arrow { display: none; }
+}

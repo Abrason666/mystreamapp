@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTVSeasons, getSeasonEpisodes, getBackdropUrl, getEpisodeImageUrl } from '../services/tmdbApi';
-import ExpandableText from './ExpandableText';
+import { getTVSeasons, getSeasonEpisodes, getBackdropUrl, getEpisodeImageUrl, getTVCredits, getTVRecommendations } from '../services/tmdbApi';
+import { useTrailerCycle } from '../hooks/useTrailerCycle';
 import SmartImage from './SmartImage';
 import MovieCarousel from './MovieCarousel';
 import './TVShowDetail.css';
-import './ExpandableText.css';
 import storage from '../services/storage';
-import axios from 'axios';
 import { SkeletonDetail } from './Skeleton';
-import toast from 'react-hot-toast';
-import { Play, SkipForward, RefreshCw, Heart, List, Users, Film, Eye, Check, Star, User } from 'lucide-react';
+import { Play, SkipForward, RefreshCw, Heart, List, Info, Film, Eye, Check, Star, User, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 
-const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
-const BASE_URL = 'https://api.themoviedb.org/3';
 
 function TVShowDetail({ initialSeason }) {
   const { id } = useParams();
@@ -26,10 +21,12 @@ function TVShowDetail({ initialSeason }) {
   const [seasons, setSeasons] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [episodes, setEpisodes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]               = useState(true);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
   const [watchedEpisodes, setWatchedEpisodes] = useState([]);
   const [continueWatching, setContinueWatching] = useState(null);
   const [isFavoriteShow, setIsFavoriteShow] = useState(false);
+  const [pulsingFav, setPulsingFav]         = useState(false);
   
   // 🆕 NUOVO STATO: Episodio successivo
   const [nextEpisode, setNextEpisode] = useState(null);
@@ -40,9 +37,12 @@ function TVShowDetail({ initialSeason }) {
   const [crew, setCrew] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
 
-  // 🔧 RESET DELLA TAB QUANDO CAMBIA LA SERIE
+  const [openSections, setOpenSections] = useState({ similar: false });
+  const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+
   useEffect(() => {
     setActiveTab('episodes');
+    setOpenSections({ similar: false });
   }, [id]);
 
   const loadFavoriteStatus = useCallback(async () => {
@@ -51,12 +51,6 @@ function TVShowDetail({ initialSeason }) {
     setIsFavoriteShow(isFavorite);
   }, [id]);
 
-  const loadWatchingData = useCallback(async () => {
-    const watched = await storage.getWatchedEpisodes(id) || [];
-    setWatchedEpisodes(watched);
-    const continueData = await storage.getContinueWatching(id);
-    setContinueWatching(continueData);
-  }, [id]);
 
   // ============================================
   // 🎬 CARICAMENTO DATI
@@ -64,16 +58,25 @@ function TVShowDetail({ initialSeason }) {
   useEffect(() => {
     const loadShowData = async () => {
       setLoading(true);
-      
+
       // 1. Carica dettagli e stagioni
       const { seasons: showSeasons, details } = await getTVSeasons(id);
       setShowDetails(details);
-      
-      // Filtra solo stagioni valide (non speciali)
-      const validSeasons = showSeasons.filter(season => season.season_number > 0);
+
+      // Filtra stagioni valide: esclude speciali (season 0) e stagioni senza episodi
+      const validSeasons = showSeasons.filter(season => season.season_number > 0 && season.episode_count > 0);
       setSeasons(validSeasons);
-      
-      // 2. Determina quale stagione caricare
+
+      // 2. Carica continue watching PRIMA di scegliere la stagione
+      const [continueData, watched] = await Promise.all([
+        storage.getContinueWatching(id),
+        storage.getWatchedEpisodes(id),
+      ]);
+      setContinueWatching(continueData);
+      setWatchedEpisodes(watched || []);
+
+      // 3. Determina quale stagione aprire:
+      //    initialSeason (URL) → query param → stagione del continue watching → 1
       let targetSeason = 1;
       if (initialSeason) {
         targetSeason = parseInt(initialSeason);
@@ -82,38 +85,34 @@ function TVShowDetail({ initialSeason }) {
         const seasonFromUrl = urlParams.get('season');
         if (seasonFromUrl) {
           targetSeason = parseInt(seasonFromUrl);
+        } else if (continueData?.seasonNumber) {
+          targetSeason = continueData.seasonNumber;
         }
       }
-      
-      console.log('🎯 Stagione target:', targetSeason);
-      
-      // 3. Carica episodi della stagione
+
+      // 4. Carica episodi della stagione target
       if (validSeasons.length > 0) {
-        const seasonToLoad = validSeasons.find(s => s.season_number === targetSeason) 
-          ? targetSeason 
+        const seasonToLoad = validSeasons.find(s => s.season_number === targetSeason)
+          ? targetSeason
           : validSeasons[0].season_number;
-        
+
         setSelectedSeason(seasonToLoad);
-        
         const seasonEpisodes = await getSeasonEpisodes(id, seasonToLoad);
         setEpisodes(seasonEpisodes);
       }
-      
-      // 4. Carica dati di visione
-      await loadWatchingData();
-      await loadFavoriteStatus();
-      
-      // 🆕 5. Carica dati aggiuntivi per le tab
+
+      // 5. Carica favoriti e dati aggiuntivi in parallelo
       await Promise.all([
+        loadFavoriteStatus(),
         loadCredits(id),
-        loadRecommendations(id)
+        loadRecommendations(id),
       ]);
-      
+
       setLoading(false);
     };
 
     loadShowData();
-  }, [id, initialSeason, loadFavoriteStatus, loadWatchingData]);
+  }, [id, initialSeason, loadFavoriteStatus]);
 
   const calculateNextEpisode = useCallback(async () => {
     if (!continueWatching || seasons.length === 0) {
@@ -170,51 +169,18 @@ function TVShowDetail({ initialSeason }) {
 
   // 🆕 CARICA CAST E CREW
   const loadCredits = async (tvId) => {
-    try {
-      console.log(`👥 Caricando cast per serie TV: ${tvId}`);
-      const response = await axios.get(`${BASE_URL}/tv/${tvId}/credits`, {
-        params: { api_key: API_KEY, language: 'it-IT' }
-      });
-      
-      // Filtra e limita il cast
-      const mainCast = response.data.cast.slice(0, 20);
-      setCast(mainCast);
-      
-      // Crew principale (creatori, produttori)
-      const mainCrew = response.data.crew
-        .filter(member => 
-          ['Creator', 'Executive Producer', 'Producer'].includes(member.job)
-        )
-        .slice(0, 10);
-      setCrew(mainCrew);
-      
-      console.log(`✅ Cast caricato: ${mainCast.length} attori`);
-    } catch (error) {
-      console.error('❌ Errore caricamento cast:', error);
-      setCast([]);
-      setCrew([]);
-    }
+    const data = await getTVCredits(tvId);
+    setCast(data.cast.slice(0, 20));
+    setCrew(data.crew
+      .filter(m => ['Creator', 'Executive Producer', 'Producer'].includes(m.job))
+      .slice(0, 10));
   };
 
-  // 🆕 CARICA SERIE SIMILI
   const loadRecommendations = async (tvId) => {
-    try {
-      console.log(`🔍 Caricando serie simili per: ${tvId}`);
-      const response = await axios.get(`${BASE_URL}/tv/${tvId}/recommendations`, {
-        params: { api_key: API_KEY, language: 'it-IT' }
-      });
-      
-      // Aggiungi il campo 'type' per ogni risultato
-      const tvRecommendations = response.data.results
-        .slice(0, 20)
-        .map(item => ({ ...item, type: 'tv' }));
-      
-      setRecommendations(tvRecommendations);
-      console.log(`✅ Serie simili caricate: ${tvRecommendations.length}`);
-    } catch (error) {
-      console.error('❌ Errore caricamento serie simili:', error);
-      setRecommendations([]);
-    }
+    const data = await getTVRecommendations(tvId);
+    setRecommendations(
+      data.results.slice(0, 20).map(item => ({ ...item, type: 'tv' }))
+    );
   };
 
   // ============================================
@@ -231,19 +197,16 @@ function TVShowDetail({ initialSeason }) {
         !(fav.id === parseInt(id) && fav.type === 'tv')
       );
       setIsFavoriteShow(false);
-      console.log('💔 Serie rimossa dai favoriti:', showDetails.name);
     } else {
       // Aggiungi ai favoriti
       const favoriteItem = { ...showDetails, type: 'tv' };
       updatedFavorites = [...favorites, favoriteItem];
       setIsFavoriteShow(true);
-      console.log('❤️ Serie aggiunta ai favoriti:', showDetails.name);
     }
     
     storage.saveFavorites(updatedFavorites);
-    toast(isFavoriteShow ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
-      { icon: isFavoriteShow ? '💔' : '🧡' }
-    );
+    setPulsingFav(true);
+    setTimeout(() => setPulsingFav(false), 500);
     window.dispatchEvent(new CustomEvent('favoritesChanged', {
       detail: { favorites: updatedFavorites }
     }));
@@ -254,12 +217,12 @@ function TVShowDetail({ initialSeason }) {
   // ============================================
 
   const handleSeasonChange = async (seasonNumber) => {
+    if (seasonNumber === selectedSeason) return;
     setSelectedSeason(seasonNumber);
-    setLoading(true);
-    
+    setEpisodesLoading(true);
     const seasonEpisodes = await getSeasonEpisodes(id, seasonNumber);
     setEpisodes(seasonEpisodes);
-    setLoading(false);
+    setEpisodesLoading(false);
   };
 
   const playEpisode = (episode) => {
@@ -281,7 +244,6 @@ function TVShowDetail({ initialSeason }) {
     const firstSeason = seasons.find(s => s.season_number === 1) || seasons[0];
     const seasonNumber = firstSeason.season_number;
     
-    console.log('🎬 Iniziando serie dal primo episodio: S', seasonNumber, 'E1');
     
     // Carica episodi della prima stagione per ottenere titolo vero
     try {
@@ -371,19 +333,28 @@ function TVShowDetail({ initialSeason }) {
     }
   };
 
-  // Marca tutti gli episodi della stagione corrente come visti
+  // Marca/deseleziona tutti gli episodi della stagione corrente
   const markSeasonAsWatched = async () => {
-    const seasonKeys = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
-    const existing   = await storage.getWatchedEpisodes(id) || [];
-    const allMarked  = [...new Set([...existing, ...seasonKeys])];
-    await storage.saveWatchedEpisodes(id, allMarked);
-    setWatchedEpisodes(allMarked);
+    const seasonKeys  = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
+    const allWatched  = seasonKeys.every(k => watchedEpisodes.includes(k));
+    const existing    = await storage.getWatchedEpisodes(id) || [];
 
-    // Se continueWatching era in questa stagione, azzera
-    if (continueWatching?.seasonNumber === selectedSeason) {
-      await storage.saveContinueWatching(id, null);
-      setContinueWatching(null);
+    let updated;
+    if (allWatched) {
+      // Togli la spunta a tutti gli episodi della stagione
+      updated = existing.filter(k => !seasonKeys.includes(k));
+    } else {
+      // Marca tutti come visti
+      updated = [...new Set([...existing, ...seasonKeys])];
+      // Se continueWatching era in questa stagione, azzera
+      if (continueWatching?.seasonNumber === selectedSeason) {
+        await storage.saveContinueWatching(id, null);
+        setContinueWatching(null);
+      }
     }
+
+    await storage.saveWatchedEpisodes(id, updated);
+    setWatchedEpisodes(updated);
   };
 
   const isEpisodeWatched = (episode) => {
@@ -418,6 +389,10 @@ function TVShowDetail({ initialSeason }) {
     continueWatching.seasonNumber === selectedSeason &&
     continueWatching.episodeNumber === episode.episode_number;
 
+  // Hook sempre prima degli early return
+  const { showIframe, trailerVisible, trailerSrc, isMuted, iframeRef, toggleMute } =
+    useTrailerCycle(id, 'tv');
+
   // ============================================
   // 🎬 RENDERING
   // ============================================
@@ -445,14 +420,32 @@ function TVShowDetail({ initialSeason }) {
 
   return (
     <div className="tv-show-detail">
-      
+
       {/* ========================================
-          HERO SECTION - IDENTICA A MOVIEDETAIL
+          HERO SECTION - BACKDROP + TRAILER LOOP
           ======================================== */}
-      <div 
-        className="tv-hero"
-        style={{ backgroundImage: `url(${getBackdropUrl(showDetails.backdrop_path)})` }}
-      >
+      <div className="tv-hero">
+
+        {/* Layer 1: immagine fissa */}
+        <div
+          className="tv-hero-bg"
+          style={{ backgroundImage: `url(${getBackdropUrl(showDetails.backdrop_path)})` }}
+        />
+
+        {/* Layer 2: trailer iframe (loop automatico) */}
+        {showIframe && trailerSrc && (
+          <div className={`tv-hero-trailer${trailerVisible ? ' visible' : ''}`}>
+            <iframe
+              ref={iframeRef}
+              src={trailerSrc}
+              frameBorder="0"
+              allow="autoplay; encrypted-media"
+              title="trailer"
+            />
+            <div className="tv-hero-trailer-mask" />
+          </div>
+        )}
+
         <div className="tv-hero-overlay">
           <div className="tv-hero-content">
             
@@ -484,16 +477,10 @@ function TVShowDetail({ initialSeason }) {
               </div>
             )}
             
-            {/* Descrizione */}
-            <div className="tv-description">
-              <ExpandableText
-                text={showDetails.overview}
-                maxLength={200}
-                className="tv-overview-text"
-                expandText="Leggi tutto"
-                collapseText="Riduci"
-              />
-            </div>
+            {/* Descrizione — 3 righe, si espande al hover come HeroSection */}
+            {showDetails.overview && (
+              <p className="tv-overview">{showDetails.overview}</p>
+            )}
             
             {/* Creatore (come il regista per i film) */}
             {creator && (
@@ -507,56 +494,53 @@ function TVShowDetail({ initialSeason }) {
                 🆕 BOTTONI AZIONI - LOGICA A 3 SCENARI
                 ======================================== */}
             <div className="tv-actions">
-              
-              {/* SCENARIO 1: Mai visto nulla → Solo "Riproduci" */}
-              {!continueWatching && (
-                <button className="btn btn-primary btn-lg" onClick={playFromBeginning}>
-                  <Play size={18} fill="currentColor" />
-                  <div className="btn-text"><div>Riproduci</div></div>
+
+              {/* Bottone principale — arancione */}
+              {!continueWatching ? (
+                <button className="tv-btn-play" onClick={playFromBeginning}>
+                  <Play size={20} fill="currentColor" />
+                  Riproduci
+                </button>
+              ) : (
+                <button className="tv-btn-play" onClick={handleContinueWatching}>
+                  <Play size={20} fill="currentColor" />
+                  Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}
                 </button>
               )}
 
-              {/* SCENARIO 2 & 3: Sta guardando → "Continua" + altro bottone */}
-              {continueWatching && (
-                <>
-                  {/* Bottone "Continua" - SEMPRE presente se c'è continueWatching */}
-                  <button className="btn btn-primary btn-lg" onClick={handleContinueWatching}>
-                    <Play size={18} fill="currentColor" />
-                    <div className="btn-text"><div>Continua S{continueWatching.seasonNumber}E{continueWatching.episodeNumber}</div></div>
-                  </button>
-
-                  {nextEpisode && nextEpisode.exists && (
-                    <button className="btn btn-secondary btn-lg" onClick={handlePlayNextEpisode}>
-                      <SkipForward size={18} />
-                      <div className="btn-text"><div>Episodio Successivo S{nextEpisode.seasonNumber}E{nextEpisode.episodeNumber}</div></div>
-                    </button>
-                  )}
-
-                  {nextEpisode && nextEpisode.seriesCompleted && (
-                    <button className="btn btn-secondary btn-lg" onClick={handleRestartSeries}>
-                      <RefreshCw size={18} />
-                      <div className="btn-text"><div>Riguarda dall'Inizio</div></div>
-                    </button>
-                  )}
-                </>
+              {/* Bottone secondario — glass, solo se c'è un episodio successivo o la serie è finita */}
+              {continueWatching && nextEpisode?.exists && (
+                <button className="tv-btn-info" onClick={handlePlayNextEpisode}>
+                  <SkipForward size={18} />
+                  Successivo S{nextEpisode.seasonNumber}E{nextEpisode.episodeNumber}
+                </button>
               )}
-              
-              {/* 🆕 Bottone Preferiti - SOLO ICONA */}
+              {continueWatching && nextEpisode?.seriesCompleted && (
+                <button className="tv-btn-info" onClick={handleRestartSeries}>
+                  <RefreshCw size={18} />
+                  Riguarda dall'Inizio
+                </button>
+              )}
+
+              {/* Cuore */}
               <button
-                className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteShow ? 'remove' : ''}`}
+                className={`tv-btn-fav${isFavoriteShow ? ' active' : ''}${pulsingFav ? ' heart-pulse' : ''}`}
                 onClick={toggleFavorites}
-                title={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <Heart size={18} fill={isFavoriteShow ? 'currentColor' : 'none'} />
-                <span className="btn-text">
-                  {isFavoriteShow ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
-                </span>
+                <Heart size={20} fill={isFavoriteShow ? 'currentColor' : 'none'} />
               </button>
             </div>
             
           </div>
         </div>
+
+        {/* Pulsante mute — compare solo quando il trailer è visibile */}
+        {showIframe && trailerVisible && (
+          <button className="detail-mute-btn" onClick={toggleMute} aria-label={isMuted ? 'Attiva audio' : 'Disattiva audio'}>
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+        )}
       </div>
 
       {/* ========================================
@@ -567,16 +551,9 @@ function TVShowDetail({ initialSeason }) {
           <button className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`} onClick={() => setActiveTab('episodes')}>
             <List size={15} /> Episodi
           </button>
-          {cast.length > 0 && (
-            <button className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`} onClick={() => setActiveTab('cast')}>
-              <Users size={15} /> Cast
-            </button>
-          )}
-          {recommendations.length > 0 && (
-            <button className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`} onClick={() => setActiveTab('similar')}>
-              <Film size={15} /> Serie Simili
-            </button>
-          )}
+          <button className={`tab-button ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>
+            <Info size={15} /> Info
+          </button>
         </div>
       </div>
 
@@ -623,18 +600,27 @@ function TVShowDetail({ initialSeason }) {
                       <span className="season-meta-badge upcoming">In arrivo</span>
                     )}
                   </p>
-                  {episodes.length > 0 && (
-                    <button className="mark-season-btn" onClick={markSeasonAsWatched}>
-                      <Check size={12} />
-                      Segna tutti come visti
-                    </button>
-                  )}
+                  {episodes.length > 0 && (() => {
+                    const seasonKeys  = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
+                    const allWatched  = seasonKeys.every(k => watchedEpisodes.includes(k));
+                    return (
+                      <button className={`mark-season-btn${allWatched ? ' active' : ''}`} onClick={markSeasonAsWatched}>
+                        <Check size={12} />
+                        {allWatched ? 'Togli spunta a tutti' : 'Segna tutti come visti'}
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
             </div>
 
             {/* LISTA EPISODI — layout orizzontale */}
-            <div className="episodes-list">
+            {episodesLoading && (
+              <div className="episodes-loading">
+                <div className="episodes-spinner" />
+              </div>
+            )}
+            <div className={`episodes-list${episodesLoading ? ' episodes-list-loading' : ''}`}>
               {episodes.map(episode => {
                 const watched  = isEpisodeWatched(episode);
                 const current  = isContinuingEpisode(episode);
@@ -699,43 +685,102 @@ function TVShowDetail({ initialSeason }) {
           </div>
         )}
 
-        {/* === CAST TAB === */}
-        {activeTab === 'cast' && cast.length > 0 && (
-          <div className="tab-panel tab-cast">
-            <h2 className="tab-title">Cast Principale</h2>
-            <div className="cast-grid">
-              {cast.map(actor => (
-                <div key={actor.id} className="cast-item">
-                  <div className="cast-photo">
-                    {actor.profile_path ? (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
-                        alt={actor.name}
-                      />
-                    ) : (
-                      <div className="cast-photo-placeholder">
-                        <User size={32} />
+        {/* === INFO TAB === */}
+        {activeTab === 'info' && (
+          <div className="tab-panel tab-info">
+            <div className="tv-scroll-content">
+
+              {/* Riga: metadata + cast */}
+              <div className="tv-main-row">
+
+                {/* Metadata */}
+                <div className="info-meta">
+                  <div className="info-group">
+                    {creator && (
+                      <div className="info-row">
+                        <span className="info-label">Creata da</span>
+                        <span className="info-value">{creator.name}</span>
+                      </div>
+                    )}
+                    {showDetails.number_of_seasons > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Stagioni</span>
+                        <span className="info-value">{showDetails.number_of_seasons}</span>
+                      </div>
+                    )}
+                    {showDetails.number_of_episodes > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Episodi totali</span>
+                        <span className="info-value">{showDetails.number_of_episodes}</span>
+                      </div>
+                    )}
+                    {showDetails.episode_run_time?.length > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Durata episodio</span>
+                        <span className="info-value">{showDetails.episode_run_time[0]} min</span>
+                      </div>
+                    )}
+                    {showDetails.networks?.length > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Rete</span>
+                        <span className="info-value">{showDetails.networks.map(n => n.name).join(', ')}</span>
+                      </div>
+                    )}
+                    {showDetails.spoken_languages?.length > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Lingua originale</span>
+                        <span className="info-value">{showDetails.spoken_languages.map(l => l.english_name).join(', ')}</span>
                       </div>
                     )}
                   </div>
-                  <div className="cast-details">
-                    <p className="cast-actor-name">{actor.name}</p>
-                    <p className="cast-character-name">{actor.character}</p>
+                </div>
+
+                {/* Cast compatto — max 8 */}
+                {cast.length > 0 && (
+                  <div className="movie-cast-col">
+                    <h2 className="section-label">Cast</h2>
+                    <div className="cast-compact-grid">
+                      {cast.slice(0, 10).map(actor => (
+                        <div key={actor.id} className="cast-compact-item">
+                          {actor.profile_path ? (
+                            <img
+                              className="cast-compact-photo"
+                              src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
+                              alt={actor.name}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="cast-compact-photo cast-compact-placeholder">
+                              <User size={20} />
+                            </div>
+                          )}
+                          <div className="cast-compact-info">
+                            <p className="cast-compact-name">{actor.name}</p>
+                            <p className="cast-compact-char">{actor.character}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Serie Simili — collassabile */}
+              {recommendations.length > 0 && (
+                <div className="movie-section">
+                  <button className="section-toggle" onClick={() => toggleSection('similar')}>
+                    <span className="section-label">Serie Simili</span>
+                    <ChevronDown size={18} className={`section-chevron${openSections.similar ? ' open' : ''}`} />
+                  </button>
+                  <div className={`section-body${openSections.similar ? ' open' : ''}`}>
+                    <div className="section-body-inner">
+                      <MovieCarousel title="" items={recommendations} type="tv" />
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              )}
 
-        {/* === SIMILAR TV SHOWS TAB === */}
-        {activeTab === 'similar' && recommendations.length > 0 && (
-          <div className="tab-panel tab-similar">
-            <MovieCarousel
-              title="Serie TV Simili"
-              items={recommendations}
-              type="tv"
-            />
+            </div>
           </div>
         )}
         

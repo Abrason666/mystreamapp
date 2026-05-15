@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useParams, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, useParams, useLocation, useNavigate } from 'react-router-dom';
 import SearchComponent from './components/SearchComponent';
 import CategoriesComponent from './components/CategoriesComponent';
 import VixSrcPlayer from './components/VixSrcPlayer';
@@ -10,7 +10,9 @@ import MovieDetail from './components/MovieDetail';
 import NavigationButtons from './components/NavigationButtons';
 import ErrorBoundary from './components/ErrorBoundary';
 import ScrollToTop from './components/ScrollToTop';
-import { X } from 'lucide-react';
+import ContinueWatchingCarousel from './components/ContinueWatchingCarousel';
+import UpdateNotification from './components/UpdateNotification';
+import { X, Heart, Flame, TrendingUp, Star } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { SkeletonCarousel } from './components/Skeleton';
 import { getTrendingMovies, getTrendingTVShows, getPopularMovies, getPopularTVShows } from './services/tmdbApi';
@@ -41,37 +43,32 @@ function App() {
     <Router>
       <div className="App">
         <header className="app-header">
-          {/* 🆕 GRUPPO SINISTRA: Pulsanti Navigazione + Logo + Titolo */}
           <div className="app-left-group">
             <NavigationButtons />
-            
-            <div className="app-logo-section">
-              {/* 🔧 LOGO CLICCABILE PER TORNARE ALLA HOME */}
-              <a href="/" title="Torna alla Home">
-                <img 
-                  src="/images/cat-logo.png" 
-                  alt="CatStreamApp Logo" 
-                  className="app-logo"
-                />
-              </a>
-              <h1>CatStreamApp</h1>
-            </div>
+            <NavLink to="/" end className="app-logo-link">
+              <img
+                src="/images/cat-logo.png"
+                alt="CatStreamApp"
+                className="app-logo"
+              />
+              <span className="app-brand-name">CatStreamApp</span>
+            </NavLink>
           </div>
-          
-          {/* NAVIGATION TABS + CLOSE BUTTON */}
-          <nav>
-            <a href="/">Home</a>
-            <a href="/categories">Categorie</a>
-            <a href="/search">Cerca</a>
-            <button
-              className="close-app-btn"
-              onClick={handleCloseApp}
-              title="Chiudi applicazione"
-              aria-label="Chiudi applicazione"
-            >
-              <X size={18} />
-            </button>
+
+          <nav className="app-nav">
+            <NavLink to="/" end>Home</NavLink>
+            <NavLink to="/categories">Categorie</NavLink>
+            <NavLink to="/search">Cerca</NavLink>
           </nav>
+
+          <button
+            className="close-app-btn"
+            onClick={handleCloseApp}
+            title="Chiudi applicazione"
+            aria-label="Chiudi applicazione"
+          >
+            <X size={18} />
+          </button>
         </header>
 
         <main className="app-main">
@@ -84,6 +81,8 @@ function App() {
         <div className="app-version">
           CatStreamApp v{packageJson.version}
         </div>
+
+        <UpdateNotification />
 
         <Toaster
           position="bottom-right"
@@ -154,16 +153,39 @@ function AnimatedRoutes() {
 
 function HomePage() {
   const [trendingMovies, setTrendingMovies] = React.useState([]);
-  const [trendingTV, setTrendingTV] = React.useState([]);
-  const [popularMovies, setPopularMovies] = React.useState([]);
-  const [popularTV, setPopularTV] = React.useState([]);
-  const [favorites, setFavorites] = React.useState([]);
+  const [trendingTV, setTrendingTV]         = React.useState([]);
+  const [popularMovies, setPopularMovies]   = React.useState([]);
+  const [popularTV, setPopularTV]           = React.useState([]);
+  const [favorites, setFavorites]           = React.useState([]);
   const [loadingContent, setLoadingContent] = React.useState(true);
+
+  const pendingScroll = React.useRef(null);
 
   const loadFavorites = async () => {
     const savedFavorites = await storage.getFavorites();
     setFavorites(savedFavorites);
   };
+
+  // Scroll restoration
+  React.useEffect(() => {
+    const saved = sessionStorage.getItem('home_scroll_y');
+    if (saved) {
+      sessionStorage.removeItem('home_scroll_y');
+      pendingScroll.current = parseInt(saved, 10);
+    }
+    return () => {
+      sessionStorage.setItem('home_scroll_y', Math.round(window.scrollY).toString());
+    };
+  }, []);
+
+  // Ripristina scroll dopo che i contenuti sono caricati
+  React.useEffect(() => {
+    if (pendingScroll.current !== null && !loadingContent) {
+      const y = pendingScroll.current;
+      pendingScroll.current = null;
+      requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }));
+    }
+  }, [loadingContent]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -206,16 +228,19 @@ function HomePage() {
   return (
     <div className="homepage">
       <HeroSection />
-      
+
+      <ContinueWatchingCarousel />
+
       {favorites.length > 0 && (
-        <MovieCarousel 
-          title="I tuoi Preferiti ❤️" 
-          items={favorites} 
+        <MovieCarousel
+          title="I tuoi Preferiti"
+          icon={Heart}
+          items={favorites}
           type="mixed"
           onFavoritesChange={handleFavoritesUpdate}
         />
       )}
-      
+
       {loadingContent ? (
         <>
           <SkeletonCarousel />
@@ -226,25 +251,29 @@ function HomePage() {
       ) : (
         <>
           <MovieCarousel
-            title="Film di Tendenza 🔥"
+            title="Film di Tendenza"
+            icon={Flame}
             items={trendingMovies}
             type="movie"
             onFavoritesChange={handleFavoritesUpdate}
           />
           <MovieCarousel
-            title="Serie TV di Tendenza 📺"
+            title="Serie TV di Tendenza"
+            icon={TrendingUp}
             items={trendingTV}
             type="tv"
             onFavoritesChange={handleFavoritesUpdate}
           />
           <MovieCarousel
-            title="Film Popolari 🎬"
+            title="Film Popolari"
+            icon={Star}
             items={popularMovies}
             type="movie"
             onFavoritesChange={handleFavoritesUpdate}
           />
           <MovieCarousel
-            title="Serie TV Popolari 🌟"
+            title="Serie TV Popolari"
+            icon={Star}
             items={popularTV}
             type="tv"
             onFavoritesChange={handleFavoritesUpdate}
@@ -258,7 +287,6 @@ function HomePage() {
 function SearchPage() {
   return (
     <div className="search-page">
-      <h2>Cerca Film e Serie TV</h2>
       <SearchComponent />
     </div>
   );

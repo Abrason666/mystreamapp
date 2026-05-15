@@ -2,6 +2,7 @@ const { app, BrowserWindow, session, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const log = require('electron-log');
+const { version } = require('../package.json');
 
 // ========================================
 // CONFIGURAZIONE LOGGING
@@ -88,7 +89,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true,
-    title: 'CatStreamApp v1.1.5',
+    title: `CatStreamApp v${version}`,
     show: false,
     fullscreenable: true,
     backgroundColor: '#1e3c72',
@@ -104,6 +105,25 @@ function createWindow() {
 
   ipcMain.handle('load-data', async (event, key) => {
     return loadDataFromFile(key);
+  });
+
+  ipcMain.handle('get-all-continue-watching', async () => {
+    try {
+      if (!fs.existsSync(dataFilePath)) return [];
+      const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      const entries = [];
+      for (const key of Object.keys(data)) {
+        if (!key.startsWith('mystream_continue_')) continue;
+        try {
+          const val = typeof data[key] === 'string' ? JSON.parse(data[key]) : data[key];
+          if (val) entries.push({ tmdbId: key.replace('mystream_continue_', ''), ...val });
+        } catch {}
+      }
+      return entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    } catch (error) {
+      log.error('Errore getAllContinueWatching:', error);
+      return [];
+    }
   });
 
   ipcMain.handle('clean-expired-cache', async () => {

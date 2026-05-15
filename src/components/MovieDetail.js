@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMovieDetails, getBackdropUrl } from '../services/tmdbApi';
+import {
+  getMovieDetails, getBackdropUrl,
+  getMovieCredits, getMovieVideos, getMovieCertification,
+  getMovieRecommendations, getMovieReviews,
+} from '../services/tmdbApi';
 import ExpandableText from './ExpandableText';
 import MovieCarousel from './MovieCarousel';
 import NetworkError from './NetworkError';
 import { isNetworkError } from '../utils/networkUtils';
 import './MovieDetail.css';
 import storage from '../services/storage';
-import axios from 'axios';
 import { SkeletonDetail } from './Skeleton';
-import toast from 'react-hot-toast';
-import { Play, Heart, Info, Users, Video, Star, Film } from 'lucide-react';
+import { Play, Heart, Film, Volume2, VolumeX, User, Star, ChevronDown } from 'lucide-react';
 
-const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
-const BASE_URL = 'https://api.themoviedb.org/3';
+import { useTrailerCycle } from '../hooks/useTrailerCycle';
+
 
 function MovieDetail() {
   const { id } = useParams();
@@ -28,13 +30,14 @@ function MovieDetail() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isFavoriteMovie, setIsFavoriteMovie] = useState(false);
+  const [pulsingFav, setPulsingFav]           = useState(false);
   const [networkError, setNetworkError] = useState(false);
   
-  const [activeTab, setActiveTab] = useState('info');
+  const [openSections, setOpenSections] = useState({ trailer: false, reviews: false, similar: false });
+  const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // 🔧 RESET DELLA TAB QUANDO CAMBIA IL FILM
   useEffect(() => {
-    setActiveTab('info');
+    setOpenSections({ trailer: false, reviews: false, similar: false });
   }, [id]);
 
   const loadFavoriteStatus = useCallback(async () => {
@@ -75,85 +78,40 @@ function MovieDetail() {
   }, [id, loadFavoriteStatus]);
 
   const loadCredits = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/credits`, {
-        params: { api_key: API_KEY, language: 'it-IT' }
-      });
-      
-      setCast(response.data.cast.slice(0, 20));
-      setCrew(response.data.crew);
-      
-      console.log(`✅ Cast: ${response.data.cast.length} attori`);
-    } catch (error) {
-      console.error('❌ Errore caricamento credits:', error);
-    }
+    const data = await getMovieCredits(movieId);
+    setCast(data.cast.slice(0, 20));
+    setCrew(data.crew);
   };
 
   const loadVideos = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/videos`, {
-        params: { api_key: API_KEY, language: 'it-IT' }
-      });
-      
-      const sortedVideos = response.data.results.sort((a, b) => {
-        if (a.type === 'Trailer' && b.type !== 'Trailer') return -1;
-        if (a.type !== 'Trailer' && b.type === 'Trailer') return 1;
-        if (a.official && !b.official) return -1;
-        if (!a.official && b.official) return 1;
-        return 0;
-      });
-      
-      setVideos(sortedVideos);
-      console.log(`✅ Video: ${sortedVideos.length} trovati`);
-    } catch (error) {
-      console.error('❌ Errore caricamento video:', error);
-    }
+    const data = await getMovieVideos(movieId);
+    const sorted = [...data.results].sort((a, b) => {
+      if (a.type === 'Trailer' && b.type !== 'Trailer') return -1;
+      if (a.type !== 'Trailer' && b.type === 'Trailer') return 1;
+      if (a.official && !b.official) return -1;
+      if (!a.official && b.official) return 1;
+      return 0;
+    });
+    setVideos(sorted);
   };
 
   const loadCertification = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/release_dates`, {
-        params: { api_key: API_KEY }
-      });
-      
-      const usRelease = response.data.results.find(r => r.iso_3166_1 === 'US');
-      const itRelease = response.data.results.find(r => r.iso_3166_1 === 'IT');
-      
-      const cert = (itRelease?.release_dates[0]?.certification || 
-                    usRelease?.release_dates[0]?.certification || 
-                    null);
-      
-      setCertification(cert);
-      console.log(`✅ Certificazione: ${cert || 'N/A'}`);
-    } catch (error) {
-      console.error('❌ Errore caricamento certificazione:', error);
-    }
+    const data = await getMovieCertification(movieId);
+    const usRelease = data.results.find(r => r.iso_3166_1 === 'US');
+    const itRelease = data.results.find(r => r.iso_3166_1 === 'IT');
+    const cert = itRelease?.release_dates[0]?.certification ||
+                 usRelease?.release_dates[0]?.certification || null;
+    setCertification(cert);
   };
 
   const loadRecommendations = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/recommendations`, {
-        params: { api_key: API_KEY, language: 'it-IT' }
-      });
-      
-      setRecommendations(response.data.results.slice(0, 12));
-      console.log(`✅ Raccomandazioni: ${response.data.results.length}`);
-    } catch (error) {
-      console.error('❌ Errore caricamento raccomandazioni:', error);
-    }
+    const data = await getMovieRecommendations(movieId);
+    setRecommendations(data.results.slice(0, 12));
   };
 
   const loadReviews = async (movieId) => {
-    try {
-      const response = await axios.get(`${BASE_URL}/movie/${movieId}/reviews`, {
-        params: { api_key: API_KEY, language: 'en-US' }
-      });
-      
-      setReviews(response.data.results.slice(0, 10));
-      console.log(`✅ Recensioni: ${response.data.results.length}`);
-    } catch (error) {
-      console.error('❌ Errore caricamento recensioni:', error);
-    }
+    const data = await getMovieReviews(movieId);
+    setReviews(data.results.slice(0, 10));
   };
 
 
@@ -172,9 +130,8 @@ function MovieDetail() {
     }
     
     storage.saveFavorites(updatedFavorites);
-    toast(isFavoriteMovie ? 'Rimosso dai preferiti' : 'Aggiunto ai preferiti',
-      { icon: isFavoriteMovie ? '💔' : '🧡' }
-    );
+    setPulsingFav(true);
+    setTimeout(() => setPulsingFav(false), 500);
     window.dispatchEvent(new CustomEvent('favoritesChanged', {
       detail: { favorites: updatedFavorites }
     }));
@@ -191,6 +148,10 @@ function MovieDetail() {
   const getDirector = () => crew.find(p => p.job === 'Director');
   const getScreenwriter = () => crew.find(p => p.job === 'Screenplay');
   const getProducers = () => crew.filter(p => p.job === 'Producer').slice(0, 3);
+
+  // Hook sempre prima degli early return
+  const { showIframe, trailerVisible, trailerSrc, isMuted, iframeRef, toggleMute } =
+    useTrailerCycle(id, 'movie');
 
   if (loading) return <SkeletonDetail />;
 
@@ -226,12 +187,30 @@ function MovieDetail() {
   return (
     <div className="movie-detail">
       {/* ========================================
-          HERO SECTION - IMMAGINE DI BACKGROUND
+          HERO SECTION - BACKDROP + TRAILER LOOP
           ======================================== */}
-      <div 
-        className="movie-hero"
-        style={{ backgroundImage: `url(${getBackdropUrl(movieDetails.backdrop_path)})` }}
-      >
+      <div className="movie-hero">
+
+        {/* Layer 1: immagine fissa */}
+        <div
+          className="movie-hero-bg"
+          style={{ backgroundImage: `url(${getBackdropUrl(movieDetails.backdrop_path)})` }}
+        />
+
+        {/* Layer 2: trailer iframe (loop automatico) */}
+        {showIframe && trailerSrc && (
+          <div className={`movie-hero-trailer${trailerVisible ? ' visible' : ''}`}>
+            <iframe
+              ref={iframeRef}
+              src={trailerSrc}
+              frameBorder="0"
+              allow="autoplay; encrypted-media"
+              title="trailer"
+            />
+            <div className="movie-hero-trailer-mask" />
+          </div>
+        )}
+
         <div className="movie-hero-overlay">
           <div className="movie-hero-content">
             
@@ -269,262 +248,205 @@ function MovieDetail() {
               <p className="movie-tagline">"{movieDetails.tagline}"</p>
             )}
             
-            {/* Descrizione */}
-            <div className="movie-description">
-              <ExpandableText
-                text={movieDetails.overview}
-                maxLength={200}
-                className="movie-overview-text"
-                expandText="Leggi tutto"
-                collapseText="Riduci"
-              />
-            </div>
-            
-            {/* Regista */}
-            {director && (
-              <div className="movie-director-inline">
-                <span className="director-label">Regia:</span>
-                <span className="director-name">{director.name}</span>
-              </div>
+            {/* Descrizione — 3 righe, si espande al hover come HeroSection */}
+            {movieDetails.overview && (
+              <p className="movie-overview">{movieDetails.overview}</p>
             )}
             
             {/* ========================================
-                BOTTONI AZIONI - ALLINEATI A TVSHOW
+                BOTTONI AZIONI
                 ======================================== */}
             <div className="movie-actions">
-              <button className="btn btn-primary btn-lg" onClick={playMovie}>
-                <Play size={18} fill="currentColor" />
-                <span className="btn-text">Riproduci</span>
+              <button className="md-btn-play" onClick={playMovie}>
+                <Play size={20} fill="currentColor" />
+                Riproduci
               </button>
-
               <button
-                className={`btn btn-secondary btn-lg btn-favorite ${isFavoriteMovie ? 'remove' : ''}`}
+                className={`md-btn-fav${isFavoriteMovie ? ' active' : ''}${pulsingFav ? ' heart-pulse' : ''}`}
                 onClick={toggleFavorites}
-                title={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
                 aria-label={isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
               >
-                <Heart size={18} fill={isFavoriteMovie ? 'currentColor' : 'none'} />
-                <span className="btn-text">
-                  {isFavoriteMovie ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
-                </span>
+                <Heart size={20} fill={isFavoriteMovie ? 'currentColor' : 'none'} />
               </button>
             </div>
           </div>
         </div>
+
+        {/* Pulsante mute — compare solo quando il trailer è visibile */}
+        {showIframe && trailerVisible && (
+          <button className="detail-mute-btn" onClick={toggleMute} aria-label={isMuted ? 'Attiva audio' : 'Disattiva audio'}>
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+        )}
       </div>
 
       {/* ========================================
-          TABS NAVIGATION
+          PAGINA SCORREVOLE: Info + Cast | Trailer | Recensioni
           ======================================== */}
-      <div className="movie-tabs-container">
-        <div className="movie-tabs">
-          <button className={`tab-button ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>
-            <Info size={15} /> Info
-          </button>
-          <button className={`tab-button ${activeTab === 'cast' ? 'active' : ''}`} onClick={() => setActiveTab('cast')}>
-            <Users size={15} /> Cast
-          </button>
-          {videos.length > 0 && (
-            <button className={`tab-button ${activeTab === 'trailer' ? 'active' : ''}`} onClick={() => setActiveTab('trailer')}>
-              <Video size={15} /> Trailer
-            </button>
-          )}
-          {reviews.length > 0 && (
-            <button className={`tab-button ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>
-              <Star size={15} /> Recensioni
-            </button>
-          )}
-          {recommendations.length > 0 && (
-            <button className={`tab-button ${activeTab === 'similar' ? 'active' : ''}`} onClick={() => setActiveTab('similar')}>
-              <Film size={15} /> Film Simili
-            </button>
-          )}
-        </div>
-      </div>
+      <div className="movie-scroll-content">
 
-      {/* ========================================
-          TAB CONTENT
-          ======================================== */}
-      <div className="movie-tab-content">
-        
-        {/* === INFO TAB === */}
-        {activeTab === 'info' && (
-          <div className="tab-panel tab-info">
-            <div className="info-grid">
+        {/* ── Riga principale: Info (sx) + Cast (dx) ── */}
+        <div className="movie-main-row">
 
-              {/* Crew Principale */}
-              <div className="info-card">
-                <h3>🎬 Crew Principale</h3>
-                <div className="crew-list">
-                  {director && (
-                    <div className="crew-item">
-                      <span className="crew-role">Regia:</span>
-                      <span className="crew-name">{director.name}</span>
-                    </div>
-                  )}
-                  {getScreenwriter() && (
-                    <div className="crew-item">
-                      <span className="crew-role">Sceneggiatura:</span>
-                      <span className="crew-name">{getScreenwriter().name}</span>
-                    </div>
-                  )}
-                  {getProducers().length > 0 && (
-                    <div className="crew-item">
-                      <span className="crew-role">Produttori:</span>
-                      <span className="crew-name">
-                        {getProducers().map(p => p.name).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>                
-              
-              {/* Box Office */}
-              {(movieDetails.budget > 0 || movieDetails.revenue > 0) && (
-                <div className="info-card">
-                  <h3>💰 Box Office</h3>
-                  {movieDetails.budget > 0 && (
-                    <div className="info-row">
-                      <span className="info-label">Budget:</span>
-                      <span className="info-value">${(movieDetails.budget / 1000000).toFixed(0)}M</span>
-                    </div>
-                  )}
-                  {movieDetails.revenue > 0 && (
-                    <div className="info-row">
-                      <span className="info-label">Incasso:</span>
-                      <span className="info-value">${(movieDetails.revenue / 1000000).toFixed(0)}M</span>
-                    </div>
-                  )}
+          {/* Metadata */}
+          <div className="info-meta">
+            <div className="info-group">
+              {director && (
+                <div className="info-row">
+                  <span className="info-label">Regia</span>
+                  <span className="info-value">{director.name}</span>
                 </div>
               )}
-              
-              {/* Lingue */}
-              {movieDetails.spoken_languages?.length > 0 && (
-                <div className="info-card">
-                  <h3>🌍 Lingua originale</h3>
-                  <p className="info-text">
-                    {movieDetails.spoken_languages.map(l => l.english_name).join(', ')}
-                  </p>
+              {getScreenwriter() && (
+                <div className="info-row">
+                  <span className="info-label">Sceneggiatura</span>
+                  <span className="info-value">{getScreenwriter().name}</span>
+                </div>
+              )}
+              {getProducers().length > 0 && (
+                <div className="info-row">
+                  <span className="info-label">Produttori</span>
+                  <span className="info-value">{getProducers().map(p => p.name).join(', ')}</span>
                 </div>
               )}
             </div>
+            {(movieDetails.budget > 0 || movieDetails.revenue > 0) && (
+              <div className="info-group">
+                {movieDetails.budget > 0 && (
+                  <div className="info-row">
+                    <span className="info-label">Budget</span>
+                    <span className="info-value">${(movieDetails.budget / 1_000_000).toFixed(0)}M</span>
+                  </div>
+                )}
+                {movieDetails.revenue > 0 && (
+                  <div className="info-row">
+                    <span className="info-label">Incasso</span>
+                    <span className="info-value">${(movieDetails.revenue / 1_000_000).toFixed(0)}M</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {movieDetails.spoken_languages?.length > 0 && (
+              <div className="info-group">
+                <div className="info-row">
+                  <span className="info-label">Lingua originale</span>
+                  <span className="info-value">
+                    {movieDetails.spoken_languages.map(l => l.english_name).join(', ')}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* === CAST TAB === */}
-        {activeTab === 'cast' && (
-          <div className="tab-panel tab-cast">
-            <div className="cast-grid">
-              {cast.map(actor => (
-                <div key={actor.id} className="cast-item">
-                  <div className="cast-photo">
+          {/* Cast — max 8 */}
+          {cast.length > 0 && (
+            <div className="movie-cast-col">
+              <h2 className="section-label">Cast</h2>
+              <div className="cast-compact-grid">
+                {cast.slice(0, 8).map(actor => (
+                  <div key={actor.id} className="cast-compact-item">
                     {actor.profile_path ? (
                       <img
+                        className="cast-compact-photo"
                         src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
                         alt={actor.name}
                         loading="lazy"
-                        decoding="async"
                       />
                     ) : (
-                      <div className="cast-photo-placeholder">
-                        <span>👤</span>
+                      <div className="cast-compact-photo cast-compact-placeholder">
+                        <User size={20} />
                       </div>
                     )}
+                    <div className="cast-compact-info">
+                      <p className="cast-compact-name">{actor.name}</p>
+                      <p className="cast-compact-char">{actor.character}</p>
+                    </div>
                   </div>
-                  <div className="cast-details">
-                    <p className="cast-actor-name">{actor.name}</p>
-                    <p className="cast-character-name">{actor.character}</p>
-                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Trailer — a scomparsa ── */}
+        {trailer && (
+          <div className="movie-section">
+            <button className="section-toggle" onClick={() => toggleSection('trailer')}>
+              <span className="section-label">Trailer</span>
+              <ChevronDown size={18} className={`section-chevron${openSections.trailer ? ' open' : ''}`} />
+            </button>
+            <div className={`section-body${openSections.trailer ? ' open' : ''}`}>
+              <div className="section-body-inner">
+                <div className="trailer-embed">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${trailer.key}`}
+                    title={trailer.name}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* === TRAILER TAB === */}
-        {activeTab === 'trailer' && (
-          <div className="tab-panel tab-trailer">
-            {trailer && (
-              <div className="video-container">
-                <iframe
-                  width="100%"
-                  height="600"
-                  src={`https://www.youtube.com/embed/${trailer.key}`}
-                  title={trailer.name}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                ></iframe>
-              </div>
-            )}
-            
-            {/* Altri video */}
-            {videos.length > 1 && (
-              <div className="other-videos">
-                <h3>Altri Video</h3>
-                <div className="videos-grid">
-                  {videos.slice(1, 6).map(video => (
-                    <div key={video.id} className="video-thumb">
-                      <iframe
-                        width="100%"
-                        height="200"
-                        src={`https://www.youtube.com/embed/${video.key}`}
-                        title={video.name}
-                        frameBorder="0"
-                        allowFullScreen
-                      ></iframe>
-                      <p className="video-title">{video.name}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* === REVIEWS TAB === */}
-        {activeTab === 'reviews' && (
-          <div className="tab-panel tab-reviews">
-            {reviews.map(review => (
-              <div key={review.id} className="review-card">
-                <div className="review-header">
-                  <div className="review-author">
-                    <strong>{review.author}</strong>
-                    {review.author_details?.rating && (
-                      <span className="review-rating">
-                        ⭐ {review.author_details.rating}/10
+        {/* ── Recensioni — a scomparsa ── */}
+        {reviews.length > 0 && (
+          <div className="movie-section">
+            <button className="section-toggle" onClick={() => toggleSection('reviews')}>
+              <span className="section-label">Recensioni</span>
+              <ChevronDown size={18} className={`section-chevron${openSections.reviews ? ' open' : ''}`} />
+            </button>
+            <div className={`section-body${openSections.reviews ? ' open' : ''}`}>
+              <div className="section-body-inner">
+                {reviews.slice(0, 5).map(review => (
+                  <div key={review.id} className="review-card">
+                    <div className="review-header">
+                      <div className="review-author">
+                        <strong>{review.author}</strong>
+                        {review.author_details?.rating && (
+                          <span className="review-rating">
+                            <Star size={12} fill="currentColor" style={{ color: '#feca57' }} />
+                            {review.author_details.rating}/10
+                          </span>
+                        )}
+                      </div>
+                      <span className="review-date">
+                        {new Date(review.created_at).toLocaleDateString('it-IT')}
                       </span>
-                    )}
+                    </div>
+                    <div className="review-content">
+                      <ExpandableText
+                        text={review.content}
+                        maxLength={300}
+                        expandText="Leggi tutto"
+                        collapseText="Riduci"
+                      />
+                    </div>
                   </div>
-                  <span className="review-date">
-                    {new Date(review.created_at).toLocaleDateString('it-IT')}
-                  </span>
-                </div>
-                <div className="review-content">
-                  <ExpandableText
-                    text={review.content}
-                    maxLength={300}
-                    expandText="Leggi tutto"
-                    collapseText="Riduci"
-                  />
-                </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         )}
 
-        {/* === SIMILAR MOVIES TAB === */}
-        {activeTab === 'similar' && recommendations.length > 0 && (
-          <div className="tab-panel tab-similar">
-            <MovieCarousel 
-              title="🎬 Film Simili"
-              items={recommendations}
-              type="movie"
-            />
-          </div>
-        )}
-        
       </div>
+
+      {/* ── Film Simili — a scomparsa ── */}
+      {recommendations.length > 0 && (
+        <div className="movie-similar-section">
+          <button className="section-toggle" onClick={() => toggleSection('similar')}>
+            <span className="section-label">Film Simili</span>
+            <ChevronDown size={18} className={`section-chevron${openSections.similar ? ' open' : ''}`} />
+          </button>
+          <div className={`section-body${openSections.similar ? ' open' : ''}`}>
+            <div className="section-body-inner">
+              <MovieCarousel title="" items={recommendations} type="movie" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

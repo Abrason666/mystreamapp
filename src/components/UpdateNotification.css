@@ -1,0 +1,175 @@
+/* ── CARD ── */
+.upd-card {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  width: 320px;
+  background: var(--bg-secondary, #1e1e1e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 16px 18px 18px;
+  animation: upd-slide-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes upd-slide-in {
+  from { transform: translateY(110%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── ICONA ── */
+.upd-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.upd-icon-blue   { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.upd-icon-orange { background: rgba(255, 107, 53, 0.15); color: var(--accent-primary, #ff6b35); }
+.upd-icon-green  { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.upd-icon-red    { background: rgba(239, 68,  68, 0.15); color: #f87171; }
+
+.upd-spin svg {
+  animation: upd-rotate 1.2s linear infinite;
+}
+
+@keyframes upd-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* ── TESTO ── */
+.upd-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upd-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  margin: 0;
+  font-family: var(--font-family-primary);
+}
+
+.upd-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+  margin: 0;
+  font-family: var(--font-family-primary);
+}
+
+/* ── PULSANTE CHIUDI ── */
+.upd-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.upd-close:hover {
+  color: var(--text-primary, #fff);
+}
+
+/* ── AZIONI ── */
+.upd-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.upd-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent-primary, #ff6b35);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--font-family-primary);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
+}
+
+.upd-btn-primary:hover {
+  background: #e85a22;
+  transform: scale(1.03);
+}
+
+.upd-btn-ghost {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 0.82rem;
+  font-family: var(--font-family-primary);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.upd-btn-ghost:hover {
+  color: var(--text-primary, #fff);
+}
+
+/* ── PROGRESS BAR ── */
+.upd-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.upd-progress-track {
+  flex: 1;
+  height: 5px;
+  background: var(--border-color, #333);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.upd-progress-fill {
+  height: 100%;
+  background: var(--accent-primary, #ff6b35);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+.upd-percent {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: var(--font-family-primary);
+}
+
+.upd-speed {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  margin: 3px 0 0;
+  font-family: var(--font-family-primary);
+}

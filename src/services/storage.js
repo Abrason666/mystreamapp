@@ -33,13 +33,16 @@ class StorageService {
 
   async saveFavorites(favorites) {
     try {
-      const data = JSON.stringify(favorites);
+      // Rimuove i campi base64 (cached_poster, cached_backdrop) prima di salvare.
+      // getMovieDetails/getTVDetails li aggiungono all'oggetto per uso interno,
+      // ma in storage pesano 200-400KB ciascuno e saturano lo storage dopo pochi item.
+      const sanitized = favorites.map(({ cached_poster, cached_backdrop, ...rest }) => rest);
+      const data = JSON.stringify(sanitized);
       if (this.isElectron) {
         await window.electronAPI.saveData('mystream_favorites', data);
       } else {
         localStorage.setItem('mystream_favorites', data);
       }
-      console.log('Favoriti salvati:', favorites.length);
     } catch (e) {
       console.error('Errore salvataggio favoriti:', e);
     }
@@ -102,6 +105,30 @@ class StorageService {
       }
     } catch (e) {
       console.error('Errore salvataggio watched episodes:', e);
+    }
+  }
+
+  async getAllContinueWatching() {
+    try {
+      if (this.isElectron) {
+        const data = await window.electronAPI.getAllContinueWatching();
+        return data || [];
+      } else {
+        const entries = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith('mystream_continue_')) continue;
+          try {
+            const val = JSON.parse(localStorage.getItem(key));
+            if (val) {
+              entries.push({ tmdbId: key.replace('mystream_continue_', ''), ...val });
+            }
+          } catch {}
+        }
+        return entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      }
+    } catch {
+      return [];
     }
   }
 

@@ -2,23 +2,36 @@
 .search-component {
   background: var(--bg-primary);
   min-height: calc(100vh - 80px);
+  padding-top: 80px; /* compensa header fisso (~68px header fisso) */
 }
 
-/* ── HEADER STICKY ── */
+/* ── HEADER FISSO ── */
 .search-header {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   padding: 14px 24px;
-  position: sticky;
-  top: 80px;
+  position: fixed;
+  top: 68px;
+  left: 0;
+  right: 0;
   z-index: 100;
+}
+
+
+.search-page-title {
+  font-family: var(--font-family-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 28px 24px 16px;
+  margin: 0;
 }
 
 .search-bar-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  max-width: 1400px;
+  max-width: 860px;
   margin: 0 auto;
 }
 

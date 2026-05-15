@@ -77,24 +77,31 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
 
   const saveContinueWatching = useCallback(() => {
     const watchTime = Math.floor((Date.now() - watchStartTime) / 1000);
-    if (watchTime > 60) {
-      storage.saveContinueWatching(tmdbId, {
-        seasonNumber:  parseInt(season),
-        episodeNumber: parseInt(episode),
-        episodeTitle:  currentEpisodeTitle || `Episodio ${episode}`,
-        watchTime,
-        timestamp:     Date.now(),
-        lastWatched:   new Date().toISOString(),
-      });
+    if (watchTime < 60) return;
 
-      // Verifica soglia auto-mark: max(2 min, 80% del runtime)
-      const runtime  = episodeRuntimeRef.current; // minuti
-      const threshold = Math.max(120, runtime > 0 ? runtime * 60 * 0.8 : 120);
-      if (watchTime >= threshold) {
-        autoMarkWatched();
-      }
+    if (type === 'movie') {
+      storage.saveContinueWatching(tmdbId, {
+        contentType: 'movie',
+        watchTime,
+        timestamp:   Date.now(),
+      });
+      return;
     }
-  }, [season, episode, watchStartTime, currentEpisodeTitle, tmdbId, autoMarkWatched]);
+
+    storage.saveContinueWatching(tmdbId, {
+      seasonNumber:  parseInt(season),
+      episodeNumber: parseInt(episode),
+      episodeTitle:  currentEpisodeTitle || `Episodio ${episode}`,
+      contentType:   'tv',
+      watchTime,
+      timestamp:     Date.now(),
+      lastWatched:   new Date().toISOString(),
+    });
+
+    const runtime   = episodeRuntimeRef.current;
+    const threshold = Math.max(120, runtime > 0 ? runtime * 60 * 0.8 : 120);
+    if (watchTime >= threshold) autoMarkWatched();
+  }, [type, season, episode, watchStartTime, currentEpisodeTitle, tmdbId, autoMarkWatched]);
 
   const loadEpisodeTitle = useCallback(async () => {
     try {
@@ -107,6 +114,7 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
         seasonNumber:  parseInt(season),
         episodeNumber: parseInt(episode),
         episodeTitle:  epTitle,
+        contentType:   'tv',
         timestamp:     Date.now(),
         watchTime:     0,
       });
@@ -139,34 +147,40 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
   }, [tmdbId, season, episode]);
 
   useEffect(() => {
+    setWatchStartTime(Date.now());
     if (type === 'tv' && season && episode) {
       loadEpisodeTitle();
       loadEpisodeNavigation();
-      setWatchStartTime(Date.now());
+    }
+    if (type === 'movie') {
+      storage.saveContinueWatching(tmdbId, {
+        contentType: 'movie',
+        watchTime:   0,
+        timestamp:   Date.now(),
+      });
     }
   }, [tmdbId, season, episode, type, loadEpisodeTitle, loadEpisodeNavigation]);
 
   useEffect(() => {
-    if (type !== 'tv') return;
     const id = setInterval(saveContinueWatching, 30000);
     return () => clearInterval(id);
-  }, [type, saveContinueWatching]);
+  }, [saveContinueWatching]);
 
   useEffect(() => {
-    const onUnload     = () => { if (type === 'tv') saveContinueWatching(); };
-    const onVisibility = () => { if (document.visibilityState === 'hidden' && type === 'tv') saveContinueWatching(); };
+    const onUnload     = () => saveContinueWatching();
+    const onVisibility = () => { if (document.visibilityState === 'hidden') saveContinueWatching(); };
     window.addEventListener('beforeunload', onUnload);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('beforeunload', onUnload);
       document.removeEventListener('visibilitychange', onVisibility);
-      if (type === 'tv') saveContinueWatching();
+      saveContinueWatching();
     };
-  }, [type, saveContinueWatching]);
+  }, [saveContinueWatching]);
 
   // ── Navigazione ───────────────────────────────────────────────────────────
   const goBackToEpisodes = () => {
-    if (type === 'tv') saveContinueWatching();
+    saveContinueWatching();
     navigate(type === 'tv' ? `/tv/${tmdbId}/season/${season}` : '/');
   };
 
@@ -180,7 +194,7 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
         await storage.saveContinueWatching(tmdbId, {
           seasonNumber: sNum, episodeNumber: eNum - 1,
           episodeTitle: prev?.name || `Episodio ${eNum - 1}`,
-          timestamp: Date.now(), watchTime: 0,
+          contentType: 'tv', timestamp: Date.now(), watchTime: 0,
         });
         navigate(`/player/tv/${tmdbId}/${sNum}/${eNum - 1}`);
       } else if (sNum > 1) {
@@ -212,7 +226,7 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
         await storage.saveContinueWatching(tmdbId, {
           seasonNumber: sNum, episodeNumber: eNum + 1,
           episodeTitle: next?.name || `Episodio ${eNum + 1}`,
-          timestamp: Date.now(), watchTime: 0,
+          contentType: 'tv', timestamp: Date.now(), watchTime: 0,
         });
         navigate(`/player/tv/${tmdbId}/${sNum}/${eNum + 1}`);
       } else {
@@ -251,7 +265,7 @@ function VixSrcPlayer({ tmdbId, type, season, episode, title }) {
           )}
           {type === 'tv' && seriesTitle && <span className="player-series-name">·</span>}
           {type === 'tv' && (
-            <span className="player-ep-tag">S{season}E{episode}</span>
+            <span className="player-ep-tag">S{season} · E{episode}</span>
           )}
           <span className="player-ep-title">
             {type === 'tv' ? currentEpisodeTitle : title}

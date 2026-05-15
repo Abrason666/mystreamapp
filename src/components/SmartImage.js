@@ -22,7 +22,6 @@ function SmartImage({
   const handleImageError = () => {
     setIsLoading(false);
     setHasError(true);
-    console.log(`🖼️ Immagine fallita, usando placeholder: ${src}`);
   };
 
   // Se non c'è src o c'è stato un errore, mostra placeholder

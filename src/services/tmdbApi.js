@@ -104,16 +104,24 @@ export const discoverByGenre = async (genreId, type = 'movie', page = 1) => {
   }
 };
 
-// Versione paginata: restituisce { results, totalPages, page }
-export const discoverByGenrePage = async (genreId, type = 'movie', page = 1) => {
+const SORT_BY_MAP = {
+  popularity: 'popularity.desc',
+  rating:     'vote_average.desc',
+  title:      'original_title.asc',
+};
+
+// Versione paginata con sort server-side
+export const discoverByGenrePage = async (genreId, type = 'movie', page = 1, sortBy = 'popularity') => {
   try {
-    const cacheKey = `discover_paged_${type}_${genreId}_${page}`;
+    const sort_by = SORT_BY_MAP[sortBy] || (type === 'tv' ? 'first_air_date.desc' : 'release_date.desc');
+    const voteMin = sortBy === 'rating' ? 100 : 20;
+    const cacheKey = `discover_paged_${type}_${genreId}_${page}_${sortBy}`;
     const cached = await cacheService.getFromCache(cacheKey);
     if (cached) return cached;
 
     const endpoint = type === 'movie' ? '/discover/movie' : '/discover/tv';
     const response = await tmdbApi.get(endpoint, {
-      params: { with_genres: genreId, sort_by: 'popularity.desc', 'vote_count.gte': 20, page }
+      params: { with_genres: genreId, sort_by, 'vote_count.gte': voteMin, page }
     });
 
     const result = {
@@ -123,8 +131,31 @@ export const discoverByGenrePage = async (genreId, type = 'movie', page = 1) => 
     };
     await cacheService.saveToCache(cacheKey, result);
     return result;
-  } catch (error) {
-    console.error('Errore discover paginato:', error);
+  } catch {
+    return { results: [], page, totalPages: 0 };
+  }
+};
+
+// Ricerca testuale filtrata per genere
+export const searchInGenre = async (query, genreId, type, page = 1) => {
+  try {
+    const cacheKey = `search_genre_${type}_${genreId}_${encodeURIComponent(query)}_${page}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+
+    const endpoint = type === 'movie' ? '/search/movie' : '/search/tv';
+    const response = await tmdbApi.get(endpoint, { params: { query, page } });
+    const results = response.data.results.filter(item =>
+      item.genre_ids?.includes(parseInt(genreId))
+    );
+    const result = {
+      results,
+      page,
+      totalPages: response.data.total_pages,
+    };
+    await cacheService.saveToCache(cacheKey, result);
+    return result;
+  } catch {
     return { results: [], page, totalPages: 0 };
   }
 };
@@ -167,6 +198,32 @@ export const searchTVShowsPage = async (query, page = 1) => {
     console.error('Errore ricerca TV paginata:', error);
     return { results: [], page, totalPages: 0 };
   }
+};
+
+// Trending misto: film + serie TV (media_type: movie | tv)
+export const getTrendingAll = async () => {
+  try {
+    const cacheKey = 'trending_all';
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get('/trending/all/week');
+    const results = response.data.results.filter(i => i.media_type !== 'person');
+    await cacheService.saveToCache(cacheKey, results);
+    return results;
+  } catch {
+    return [];
+  }
+};
+
+export const getTVVideos = async (id) => {
+  try {
+    const cacheKey = `tv_videos_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/tv/${id}/videos`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { results: [] }; }
 };
 
 export const getTrendingMovies = async () => {
@@ -632,6 +689,97 @@ export const getContentByGenre = async (genreId) => {
     console.error('Errore caricamento contenuti per genere:', error);
     return [];
   }
+};
+
+// ── FUNZIONI CACHED per MovieDetail ──────────────────────────────────────────
+
+export const getMovieCredits = async (id) => {
+  try {
+    const cacheKey = `movie_credits_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/movie/${id}/credits`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { cast: [], crew: [] }; }
+};
+
+export const getMovieVideos = async (id) => {
+  try {
+    const cacheKey = `movie_videos_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/movie/${id}/videos`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { results: [] }; }
+};
+
+export const getMovieCertification = async (id) => {
+  try {
+    const cacheKey = `movie_cert_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/movie/${id}/release_dates`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { results: [] }; }
+};
+
+export const getMovieRecommendations = async (id) => {
+  try {
+    const cacheKey = `movie_rec_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/movie/${id}/recommendations`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { results: [] }; }
+};
+
+export const getMovieReviews = async (id) => {
+  try {
+    const cacheKeyIt = `movie_reviews_${id}_it`;
+    const cachedIt = await cacheService.getFromCache(cacheKeyIt);
+    if (cachedIt) return cachedIt;
+
+    const itRes = await tmdbApi.get(`/movie/${id}/reviews`, { params: { language: 'it-IT' } });
+    if (itRes.data?.results?.length > 0) {
+      await cacheService.saveToCache(cacheKeyIt, itRes.data);
+      return itRes.data;
+    }
+
+    const cacheKeyEn = `movie_reviews_${id}_en`;
+    const cachedEn = await cacheService.getFromCache(cacheKeyEn);
+    if (cachedEn) return cachedEn;
+    const enRes = await tmdbApi.get(`/movie/${id}/reviews`, { params: { language: 'en-US' } });
+    await cacheService.saveToCache(cacheKeyEn, enRes.data);
+    return enRes.data;
+  } catch { return { results: [] }; }
+};
+
+// ── FUNZIONI CACHED per TVShowDetail ─────────────────────────────────────────
+
+export const getTVCredits = async (id) => {
+  try {
+    const cacheKey = `tv_credits_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/tv/${id}/credits`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { cast: [], crew: [] }; }
+};
+
+export const getTVRecommendations = async (id) => {
+  try {
+    const cacheKey = `tv_rec_${id}`;
+    const cached = await cacheService.getFromCache(cacheKey);
+    if (cached) return cached;
+    const response = await tmdbApi.get(`/tv/${id}/recommendations`);
+    await cacheService.saveToCache(cacheKey, response.data);
+    return response.data;
+  } catch { return { results: [] }; }
 };
 
 export default tmdbApi;

@@ -1,281 +1,356 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTrendingMovies, getBackdropUrl } from '../services/tmdbApi';
-import ExpandableText from './ExpandableText';
+import {
+  getTrendingAll, getBackdropUrl,
+  getMovieVideos, getTVVideos,
+} from '../services/tmdbApi';
 import UpcomingBadge from './UpcomingBadge';
-import './HeroSection.css';
-import storage from '../services/storage';
 import { SkeletonHero } from './Skeleton';
-import toast from 'react-hot-toast';
-import { Info, Play, Heart, ChevronLeft, ChevronRight, Pause } from 'lucide-react';
+import storage from '../services/storage';
+import { Info, Play, Heart, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause } from 'lucide-react';
+import { Star } from 'lucide-react';
+import './HeroSection.css';
+
+const SLIDE_DURATION   = 16000; // ~4.5s hidden + ~11.5s visibile
+const TRAILER_FADE_OUT = 1000;  // durata fade-out prima di swappare l'iframe
+const TRAILER_FADE_IN  = 4500;  // delay prima che il nuovo trailer diventi visibile
+const MAX_PAUSE        = 30000; // pausa massima: dopo 30s riprende da solo
 
 function HeroSection() {
-  const [heroItems, setHeroItems] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [favoriteStates, setFavoriteStates] = useState({});
-  const [isPaused, setIsPaused] = useState(false);
-  
   const navigate = useNavigate();
 
-  // 🔧 HELPER: Determina se l'item è un film o una serie TV
-  const getItemType = (item) => {
-    // Se ha media_type esplicito, usalo
-    if (item.media_type) {
-      return item.media_type === 'movie' ? 'movie' : 'tv';
-    }
-    // Altrimenti: i film hanno "title", le serie TV hanno "name"
-    return item.title ? 'movie' : 'tv';
-  };
+  const [heroItems, setHeroItems]         = useState([]);
+  const [currentIndex, setCurrentIndex]   = useState(0);
+  const [loading, setLoading]             = useState(true);
+  const [favoriteStates, setFavoriteStates] = useState({});
+  const [pulsingFav, setPulsingFav]         = useState(false);
+  const [isPaused, setIsPaused]           = useState(false);
 
-  // 🔧 HELPER: Ottieni il titolo (film usano "title", serie TV usano "name")
-  const getItemTitle = (item) => {
-    return item.title || item.name || 'Titolo non disponibile';
-  };
+  // Cross-fade: due layer di background
+  const [layers, setLayers] = useState([
+    { url: '', opacity: 1 },
+    { url: '', opacity: 0 },
+  ]);
+  const frontRef = useRef(0); // indice del layer attualmente visibile
 
-  // 🔧 HELPER: Ottieni la data di uscita (film: release_date, TV: first_air_date)
-  const getItemDate = (item) => {
-    return item.release_date || item.first_air_date;
-  };
+  // Trailer
+  const [trailerKey, setTrailerKey]       = useState(null);
+  const [showTrailer, setShowTrailer]     = useState(false);
+  const [trailerVisible, setTrailerVisible] = useState(false); // opacity controllata via JS
+  const [isMuted, setIsMuted]             = useState(true);
+  const iframeRef      = useRef(null);
+  const trailerTimer   = useRef(null);
+  const maxPauseTimer  = useRef(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadHeroItems = async () => {
-      setLoading(true);
-
-      try {
-        const trending = await getTrendingMovies();
-        if (!isMounted) return;
-
-        const itemsWithType = trending.slice(0, 5).map(item => ({
-          ...item,
-          media_type: item.media_type || 'movie'
-        }));
-        setHeroItems(itemsWithType);
-
-        const favorites = await storage.getFavorites();
-        if (!isMounted) return;
-
-        const favStates = {};
-        favorites.forEach(fav => {
-          favStates[`${fav.type}_${fav.id}`] = true;
-        });
-        setFavoriteStates(favStates);
-      } catch (error) {
-        console.error('❌ Errore caricamento hero:', error);
-      }
-
-      if (isMounted) setLoading(false);
-    };
-
-    loadHeroItems();
-    return () => { isMounted = false; };
+  // Pulizia timer su unmount
+  useEffect(() => () => {
+    clearTimeout(trailerTimer.current);
+    clearTimeout(maxPauseTimer.current);
   }, []);
 
-  // Auto-slide ogni 8 secondi (se non in pausa)
-  useEffect(() => {
-    if (!isPaused && heroItems.length > 0) {
-      const interval = setInterval(() => {
-        setCurrentIndex(prev => (prev + 1) % heroItems.length);
-      }, 8000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [heroItems.length, isPaused]);
+  // (indicatorKey rimosso — usiamo dot semplici invece di barre animate)
 
-  // 🎬 PLAY: Avvia il player (film o serie TV)
+  // ── HELPERS ──────────────────────────────────────────────────────────────────
+  const getItemType  = (item) => item.media_type === 'movie' ? 'movie' : 'tv';
+  const getItemTitle = (item) => item.title || item.name || '';
+  const getItemDate  = (item) => item.release_date || item.first_air_date;
+
+  // ── CROSS-FADE BACKGROUND ─────────────────────────────────────────────────
+  const changeBg = useCallback((newUrl) => {
+    const next = frontRef.current === 0 ? 1 : 0;
+    const curr = frontRef.current;
+
+    // Prepara il layer nascosto con la nuova immagine
+    setLayers(prev => {
+      const updated = [...prev];
+      updated[next] = { url: newUrl, opacity: 0 };
+      return updated;
+    });
+
+    // Un frame dopo, avvia il cross-fade
+    setTimeout(() => {
+      setLayers(prev => {
+        const updated = [...prev];
+        updated[next] = { url: newUrl, opacity: 1 };
+        updated[curr] = { ...prev[curr], opacity: 0 };
+        return updated;
+      });
+      frontRef.current = next;
+    }, 50);
+  }, []);
+
+  // ── TRAILER ───────────────────────────────────────────────────────────────
+  const loadTrailer = useCallback((item) => {
+    clearTimeout(trailerTimer.current);
+
+    // Fade-out del trailer corrente (la CSS transition lo gestisce in 0.9s)
+    setTrailerVisible(false);
+
+    // Dopo il fade-out, smonta il vecchio iframe e carica il nuovo trailer
+    trailerTimer.current = setTimeout(() => {
+      setShowTrailer(false);
+      setTrailerKey(null);
+
+      (async () => {
+        try {
+          const type = getItemType(item);
+          const data = type === 'movie'
+            ? await getMovieVideos(item.id)
+            : await getTVVideos(item.id);
+          const trailer = data.results?.find(
+            v => v.type === 'Trailer' && v.site === 'YouTube'
+          );
+          if (trailer) {
+            setTrailerKey(trailer.key);
+            setShowTrailer(true);
+            trailerTimer.current = setTimeout(() => setTrailerVisible(true), TRAILER_FADE_IN);
+          }
+        } catch { /* nessun trailer, rimane il backdrop */ }
+      })();
+    }, TRAILER_FADE_OUT);
+  }, []);
+
+  const toggleMute = () => {
+    const next = !isMuted;
+    setIsMuted(next);
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func: next ? 'mute' : 'unMute', args: [] }), '*'
+    );
+    if (!next) {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: 'setVolume', args: [80] }), '*'
+      );
+    }
+  };
+
+  const togglePause = () => {
+    const next = !isPaused;
+    setIsPaused(next);
+    clearTimeout(maxPauseTimer.current);
+    if (next) {
+      // Auto-riprende dopo MAX_PAUSE secondi al massimo
+      maxPauseTimer.current = setTimeout(() => setIsPaused(false), MAX_PAUSE);
+    }
+  };
+
+  // ── CARICAMENTO INIZIALE ──────────────────────────────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const all = await getTrendingAll();
+        if (!isMounted) return;
+
+        const items = all.slice(0, 8).map(i => ({
+          ...i,
+          media_type: i.media_type || 'movie',
+        }));
+        setHeroItems(items);
+
+        if (items.length) {
+          changeBg(getBackdropUrl(items[0].backdrop_path));
+          loadTrailer(items[0]);
+        }
+
+        const favs = await storage.getFavorites();
+        if (!isMounted) return;
+        const states = {};
+        favs.forEach(f => { states[`${f.type}_${f.id}`] = true; });
+        setFavoriteStates(states);
+      } catch {}
+      if (isMounted) setLoading(false);
+    };
+    load();
+    return () => { isMounted = false; };
+  }, [changeBg, loadTrailer]);
+
+  // ── AUTO-SLIDE ────────────────────────────────────────────────────────────
+  // setTimeout invece di setInterval: ogni cambio slide (manuale o auto) fa ripartire il timer da zero
+  useEffect(() => {
+    if (isPaused || !heroItems.length) return;
+    const id = setTimeout(() => {
+      setCurrentIndex(prev => (prev + 1) % heroItems.length);
+    }, SLIDE_DURATION);
+    return () => clearTimeout(id);
+  }, [currentIndex, heroItems.length, isPaused]);
+
+  // ── CAMBIA SLIDE ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!heroItems.length) return;
+    const item = heroItems[currentIndex];
+    changeBg(getBackdropUrl(item.backdrop_path));
+    loadTrailer(item);
+    setIsMuted(true); // rimuta al cambio slide
+  }, [currentIndex, heroItems, changeBg, loadTrailer]);
+
+  // ── NAVIGAZIONE MANUALE ───────────────────────────────────────────────────
+  const goTo = (idx) => {
+    setCurrentIndex((idx + heroItems.length) % heroItems.length);
+    clearTimeout(maxPauseTimer.current);
+    setIsPaused(false);
+  };
+
+  // ── AZIONI ───────────────────────────────────────────────────────────────
   const playItem = (item) => {
     const type = getItemType(item);
-    
-    if (type === 'movie') {
-      navigate(`/player/movie/${item.id}`);
-    } else {
-      // Per le serie TV, vai al primo episodio (S1E1)
-      navigate(`/player/tv/${item.id}/1/1`);
-    }
+    navigate(type === 'movie'
+      ? `/player/movie/${item.id}`
+      : `/player/tv/${item.id}/1/1`);
   };
 
-  // ℹ️ DETTAGLI: Vai alla pagina dettagli (film o serie TV)
   const goToDetails = (item) => {
     const type = getItemType(item);
-    
-    if (type === 'movie') {
-      navigate(`/movie/${item.id}`);
-    } else {
-      navigate(`/tv/${item.id}`);
-    }
+    navigate(type === 'movie' ? `/movie/${item.id}` : `/tv/${item.id}`);
   };
 
-  // ❤️ PREFERITI: Aggiungi/Rimuovi dai preferiti
   const toggleFavorites = async (item) => {
     const type = getItemType(item);
-    const favorites = await storage.getFavorites();
-    
-    const isCurrentlyFavorite = favorites.some(fav => 
-      fav.id === item.id && fav.type === type
-    );
-    
-    let updatedFavorites;
-    
-    if (isCurrentlyFavorite) {
-      updatedFavorites = favorites.filter(fav => 
-        !(fav.id === item.id && fav.type === type)
-      );
-      console.log(`💔 ${type === 'movie' ? 'Film' : 'Serie TV'} rimosso dai favoriti:`, getItemTitle(item));
-    } else {
-      const favoriteItem = { ...item, type: type };
-      updatedFavorites = [...favorites, favoriteItem];
-      console.log(`❤️ ${type === 'movie' ? 'Film' : 'Serie TV'} aggiunto ai favoriti:`, getItemTitle(item));
-    }
-    
-    await storage.saveFavorites(updatedFavorites);
-
-    toast(isCurrentlyFavorite
-      ? `Rimosso dai preferiti`
-      : `Aggiunto ai preferiti`,
-      { icon: isCurrentlyFavorite ? '💔' : '🧡' }
-    );
-
-    const key = `${type}_${item.id}`;
-    setFavoriteStates(prev => ({
-      ...prev,
-      [key]: !isCurrentlyFavorite
-    }));
-    
-    // Notifica altri componenti
-    window.dispatchEvent(new CustomEvent('favoritesChanged', { 
-      detail: { favorites: updatedFavorites } 
-    }));
+    const favs = await storage.getFavorites();
+    const isFav = favs.some(f => f.id === item.id && f.type === type);
+    const updated = isFav
+      ? favs.filter(f => !(f.id === item.id && f.type === type))
+      : [...favs, { ...item, type }];
+    await storage.saveFavorites(updated);
+    setFavoriteStates(prev => ({ ...prev, [`${type}_${item.id}`]: !isFav }));
+    setPulsingFav(true);
+    setTimeout(() => setPulsingFav(false), 500);
+    window.dispatchEvent(new CustomEvent('favoritesChanged', { detail: { favorites: updated } }));
   };
 
+  // ── RENDER ────────────────────────────────────────────────────────────────
   if (loading) return <SkeletonHero />;
+  if (!heroItems.length) return null;
 
-  // === EMPTY STATE ===
-  if (heroItems.length === 0) {
-    return (
-      <div className="hero-loading">
-        <p>Nessun contenuto disponibile</p>
-      </div>
-    );
-  }
+  const item      = heroItems[currentIndex];
+  const itemType  = getItemType(item);
+  const itemTitle = getItemTitle(item);
+  const itemDate  = getItemDate(item);
+  const isFav     = favoriteStates[`${itemType}_${item.id}`] || false;
 
-  // === RENDER ===
-  const currentItem = heroItems[currentIndex];
-  const currentType = getItemType(currentItem);
-  const currentTitle = getItemTitle(currentItem);
-  const currentDate = getItemDate(currentItem);
-  
-  // Chiave unica per controllare stato favoriti
-  const favoriteKey = `${currentType}_${currentItem.id}`;
-  const isFavorite = favoriteStates[favoriteKey] || false;
+  const trailerSrc = trailerKey
+    ? `https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${trailerKey}&enablejsapi=1&modestbranding=1&rel=0&iv_load_policy=3`
+    : null;
 
   return (
-    <div className="hero-carousel">
-      <div 
-        className="hero-section"
-        style={{ background: `url(${getBackdropUrl(currentItem.backdrop_path)})` }}
-      >
-        <div className="hero-overlay">
-          <div className="hero-content">
-            {/* TITOLO */}
-            <h1 className="hero-title">{currentTitle}</h1>
-            
-            {/* BADGE "IN ARRIVO" (solo per film con data futura) */}
-            <UpcomingBadge releaseDate={currentDate} />
-            
-            {/* DESCRIZIONE CON EXPANDABLETEXT */}
-            <div className="hero-description">
-              <ExpandableText
-                text={currentItem.overview}
-                maxLength={200}
-                className="hero-overview-text"
-                expandText="Leggi tutto"
-                collapseText="Riduci"
-              />
-            </div>
-            
-            {/* METADATA */}
-            <div className="hero-metadata">
-              <span className="hero-rating">⭐ {currentItem.vote_average?.toFixed(1)}</span>
-              <span className="hero-year">
-                {currentDate ? new Date(currentDate).getFullYear() : 'N/A'}
-              </span>
-              <span className="hero-genre">
-                {currentType === 'movie' ? 'Film' : 'Serie TV'}
-              </span>
-            </div>
-            
-            {/* 🆕 BOTTONI AZIONI - INLINE: Dettagli + Riproduci + Cuore */}
-            <div className="hero-actions">
-              {/* 1️⃣ VAI AI DETTAGLI - Stile primario */}
-              <button
-                className="btn btn-primary btn-lg"
-                onClick={() => goToDetails(currentItem)}
-              >
-                <Info size={18} />
-                <span className="btn-text">Vai ai Dettagli</span>
-              </button>
+    <div className="hero-root">
 
-              <button
-                className="btn btn-primary btn-lg"
-                onClick={() => playItem(currentItem)}
-              >
-                <Play size={18} fill="currentColor" />
-                <span className="btn-text">Riproduci</span>
-              </button>
+      {/* ── BACKGROUND LAYERS (cross-fade) ── */}
+      {layers.map((layer, i) => (
+        <div
+          key={i}
+          className="hero-bg-layer"
+          style={{
+            backgroundImage: layer.url ? `url(${layer.url})` : 'none',
+            opacity: layer.opacity,
+          }}
+        />
+      ))}
 
-              <button
-                className={`btn btn-secondary btn-lg btn-favorite ${isFavorite ? 'remove' : ''}`}
-                onClick={() => toggleFavorites(currentItem)}
-                title={isFavorite ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
-                aria-label={isFavorite ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti'}
-              >
-                <Heart size={20} fill={isFavorite ? 'currentColor' : 'none'} />
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        {/* CONTROLLI NAVIGAZIONE */}
-        <div className="hero-navigation">
-          <button
-            className="hero-nav-btn"
-            onClick={() => setCurrentIndex(prev => (prev - 1 + heroItems.length) % heroItems.length)}
-            aria-label="Contenuto precedente"
-          >
-            <ChevronLeft size={28} />
-          </button>
-          <button
-            className="hero-nav-btn"
-            onClick={() => setCurrentIndex(prev => (prev + 1) % heroItems.length)}
-            aria-label="Contenuto successivo"
-          >
-            <ChevronRight size={28} />
-          </button>
-        </div>
-        
-        {/* BOTTONE PAUSA/PLAY */}
-        <button
-          className="hero-pause-btn"
-          onClick={() => setIsPaused(!isPaused)}
-          aria-label={isPaused ? 'Riprendi carosello' : 'Metti in pausa carosello'}
-        >
-          {isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
-        </button>
-      </div>
-      
-      {/* INDICATORI */}
-      <div className="hero-indicators">
-        {heroItems.map((_, index) => (
-          <button
-            key={index}
-            className={`indicator ${index === currentIndex ? 'active' : ''}`}
-            onClick={() => setCurrentIndex(index)}
-            aria-label={`Vai al contenuto ${index + 1}`}
+      {/* ── TRAILER IFRAME ── */}
+      {showTrailer && trailerSrc && (
+        <div className={`hero-trailer-wrap${trailerVisible ? ' visible' : ''}`}>
+          <iframe
+            ref={iframeRef}
+            src={trailerSrc}
+            className="hero-trailer-iframe"
+            frameBorder="0"
+            allow="autoplay; encrypted-media"
+            title="trailer"
           />
-        ))}
+          {/* Maschera trasparente: blocca i mouse-event verso l'iframe così YouTube non mostra i suoi controlli al hover */}
+          <div className="hero-trailer-mask" />
+        </div>
+      )}
+
+      {/* ── GRADIENTE OVERLAY ── */}
+      <div className="hero-overlay" />
+
+      {/* ── FRECCIA SINISTRA ── */}
+      <button
+        className="hero-arrow left"
+        onClick={() => goTo(currentIndex - 1)}
+        aria-label="Precedente"
+      >
+        <ChevronLeft size={32} />
+      </button>
+
+      {/* ── CONTENUTO ── */}
+      <div className="hero-content">
+        <h1 className="hero-title">{itemTitle}</h1>
+
+        <UpcomingBadge releaseDate={itemDate} />
+
+        <div className="hero-meta">
+          <span className="hero-type-badge">
+            {itemType === 'movie' ? 'Film' : 'Serie TV'}
+          </span>
+          <span className="hero-rating">
+            <Star size={14} fill="currentColor" style={{ color: '#feca57' }} />
+            {item.vote_average?.toFixed(1)}
+          </span>
+          {itemDate && (
+            <span className="hero-year">{new Date(itemDate).getFullYear()}</span>
+          )}
+        </div>
+
+        <p className="hero-overview">{item.overview}</p>
+
+        <div className="hero-actions">
+          <button className="hero-btn-play" onClick={() => playItem(item)}>
+            <Play size={20} fill="currentColor" />
+            Riproduci
+          </button>
+          <button className="hero-btn-info" onClick={() => goToDetails(item)}>
+            <Info size={18} />
+            Dettagli
+          </button>
+          <button
+            className={`hero-btn-fav ${isFav ? 'active' : ''} ${pulsingFav ? 'heart-pulse' : ''}`}
+            onClick={() => toggleFavorites(item)}
+            aria-label={isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+          >
+            <Heart size={20} fill={isFav ? 'currentColor' : 'none'} />
+          </button>
+        </div>
       </div>
+
+      {/* ── FRECCIA DESTRA ── */}
+      <button
+        className="hero-arrow right"
+        onClick={() => goTo(currentIndex + 1)}
+        aria-label="Successivo"
+      >
+        <ChevronRight size={32} />
+      </button>
+
+      {/* ── BOTTOM BAR ── */}
+      <div className="hero-bottom">
+        {/* Indicatori a puntino */}
+        <div className="hero-indicators">
+          {heroItems.map((_, i) => (
+            <button
+              key={i}
+              className={`hero-indicator${i === currentIndex ? ' active' : ''}`}
+              onClick={() => goTo(i)}
+              aria-label={`Vai a ${i + 1}`}
+            />
+          ))}
+        </div>
+
+        {/* Audio + Pausa */}
+        <div className="hero-controls">
+          {showTrailer && trailerVisible && (
+            <button className="hero-ctrl-btn" onClick={toggleMute} aria-label="Audio">
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+          )}
+          <button className="hero-ctrl-btn" onClick={togglePause} aria-label={isPaused ? 'Riprendi' : 'Pausa'}>
+            {isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} />}
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }

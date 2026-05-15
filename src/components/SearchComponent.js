@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   searchMoviesPage,
   searchTVShowsPage,
@@ -299,74 +300,80 @@ function SearchComponent() {
   return (
     <div className="search-component">
 
-      {/* HEADER STICKY */}
-      <div className="search-header">
-        <div className="search-bar-row">
+      <h2 className="search-page-title">Cerca Film e Serie TV</h2>
 
-          {/* Input + Dropdown */}
-          <div className="search-input-wrapper" ref={dropdownRef}>
-            <Search size={18} className="search-icon-inside" />
-            <input
-              ref={inputRef}
-              type="text"
-              className="search-input"
-              placeholder="Cerca film, serie TV, attori..."
-              value={query}
-              onChange={e => { setQuery(e.target.value); setShowDropdown(true); setDropdownIndex(-1); }}
-              onFocus={() => { if (query.trim()) setShowDropdown(true); }}
-              onKeyDown={handleInputKeyDown}
-            />
-            {query && (
-              <button className="search-clear-inline" onClick={clearSearch} aria-label="Cancella">
-                <X size={16} />
-              </button>
-            )}
+      {/* HEADER FISSO — renderizzato via portal su document.body per evitare
+           che il transform della page-enter animation rompa position:fixed */}
+      {createPortal(
+        <div className="search-header">
+          <div className="search-bar-row">
 
-            {/* Dropdown autocomplete */}
-            {showDropdown && dropdownItems.length > 0 && (
-              <ul className="search-dropdown">
-                {dropdownItems.map((item, i) => (
-                  <li
-                    key={item.query + item.timestamp}
-                    className={`dropdown-item ${i === dropdownIndex ? 'focused' : ''}`}
-                    onMouseDown={() => selectDropdownItem(item)}
-                    onMouseEnter={() => setDropdownIndex(i)}
-                  >
-                    {item.poster ? (
-                      <img
-                        src={`${THUMB_BASE}${item.poster}`}
-                        alt=""
-                        className="dropdown-thumb"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="dropdown-thumb-placeholder">
-                        {item.type === 'tv' ? <Tv size={14} /> : <Film size={14} />}
-                      </div>
-                    )}
-                    <span className="dropdown-query">{item.query}</span>
-                    <Search size={13} className="dropdown-icon-right" />
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* Input + Dropdown */}
+            <div className="search-input-wrapper" ref={dropdownRef}>
+              <Search size={18} className="search-icon-inside" />
+              <input
+                ref={inputRef}
+                type="text"
+                className="search-input"
+                placeholder="Cerca film, serie TV, attori..."
+                value={query}
+                onChange={e => { setQuery(e.target.value); setShowDropdown(true); setDropdownIndex(-1); }}
+                onFocus={() => { if (query.trim()) setShowDropdown(true); }}
+                onKeyDown={handleInputKeyDown}
+              />
+              {query && (
+                <button className="search-clear-inline" onClick={clearSearch} aria-label="Cancella">
+                  <X size={16} />
+                </button>
+              )}
+
+              {/* Dropdown autocomplete */}
+              {showDropdown && dropdownItems.length > 0 && (
+                <ul className="search-dropdown">
+                  {dropdownItems.map((item, i) => (
+                    <li
+                      key={item.query + item.timestamp}
+                      className={`dropdown-item ${i === dropdownIndex ? 'focused' : ''}`}
+                      onMouseDown={() => selectDropdownItem(item)}
+                      onMouseEnter={() => setDropdownIndex(i)}
+                    >
+                      {item.poster ? (
+                        <img
+                          src={`${THUMB_BASE}${item.poster}`}
+                          alt=""
+                          className="dropdown-thumb"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="dropdown-thumb-placeholder">
+                          {item.type === 'tv' ? <Tv size={14} /> : <Film size={14} />}
+                        </div>
+                      )}
+                      <span className="dropdown-query">{item.query}</span>
+                      <Search size={13} className="dropdown-icon-right" />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Tipo */}
+            <div className="type-pills">
+              {[['all','Tutti'],['movie','Film'],['tv','Serie TV']].map(([val, label]) => (
+                <button key={val} className={`type-pill ${contentType === val ? 'active' : ''}`} onClick={() => setContentType(val)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sort */}
+            <select className="sort-select" value={sortOrder} onChange={e => setSortOrder(e.target.value)} aria-label="Ordina per">
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
-
-          {/* Tipo */}
-          <div className="type-pills">
-            {[['all','Tutti'],['movie','Film'],['tv','Serie TV']].map(([val, label]) => (
-              <button key={val} className={`type-pill ${contentType === val ? 'active' : ''}`} onClick={() => setContentType(val)}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Sort */}
-          <select className="sort-select" value={sortOrder} onChange={e => setSortOrder(e.target.value)} aria-label="Ordina per">
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-      </div>
+        </div>,
+        document.body
+      )}
 
       {/* ERRORE RETE */}
       {networkError && !loading && (

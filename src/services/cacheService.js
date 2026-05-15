@@ -13,15 +13,12 @@ class CacheService {
     
     try {
       if (window.electronAPI) {
-        // Electron: salva su file
         await window.electronAPI.saveData(`cache_${key}`, JSON.stringify(cacheData));
       } else {
-        // Browser: salva in localStorage
         localStorage.setItem(`cache_${key}`, JSON.stringify(cacheData));
       }
-      console.log(`💾 Cache SAVED: ${key}`);
-    } catch (error) {
-      console.error('Errore salvataggio cache:', error);
+    } catch {
+      /* silently fail */
     }
   }
 
@@ -39,21 +36,14 @@ class CacheService {
         cacheData = JSON.parse(localStorage.getItem(`cache_${key}`) || 'null');
       }
 
-      // Controlla se la cache è ancora valida
       if (cacheData && Date.now() < cacheData.expires) {
-        console.log(`⚡ Cache HIT: ${key} (risparmiato tempo)`);
         return cacheData.data;
       } else if (cacheData) {
-        console.log(`⏰ Cache EXPIRED: ${key} (riscaricare)`);
-        // Rimuovi cache scaduta
         await this.removeFromCache(key);
-      } else {
-        console.log(`❌ Cache MISS: ${key} (prima volta)`);
       }
       
       return null;
-    } catch (error) {
-      console.error('Errore caricamento cache:', error);
+    } catch {
       return null;
     }
   }
@@ -80,7 +70,6 @@ class CacheService {
         return cachedImage;
       }
 
-      console.log(`📥 Scaricando immagine: ${filename}`);
       const response = await fetch(url);
       const blob = await response.blob();
       
@@ -92,15 +81,11 @@ class CacheService {
           await this.saveToCache(`img_${filename}`, base64Data);
           resolve(base64Data);
         };
-        reader.onerror = () => {
-          console.error('Errore conversione immagine');
-          resolve(url); // Fallback all'URL originale
-        };
+        reader.onerror = () => { resolve(url); };
         reader.readAsDataURL(blob);
       });
-    } catch (error) {
-      console.error('Errore cache immagine:', error);
-      return url; // Fallback all'URL originale
+    } catch {
+      return url;
     }
   }
 
@@ -129,12 +114,7 @@ class CacheService {
         cleaned = keysToRemove.length;
       }
 
-      if (cleaned > 0) {
-        console.log(`🧹 Cache pulita: ${cleaned} elementi scaduti rimossi`);
-      }
-    } catch (error) {
-      console.error('Errore pulizia cache:', error);
-    }
+    } catch { /* silently fail */ }
   }
 
   // Mostra statistiche cache
@@ -143,11 +123,7 @@ class CacheService {
     let totalSize = 0;
     
     try {
-      if (window.electronAPI) {
-        // Per Electron dovremmo leggere il file JSON
-        console.log('Cache stats disponibili solo in modalità browser per ora');
-      } else {
-        // Per localStorage possiamo contare
+      if (!window.electronAPI) {
         for (let key in localStorage) {
           if (key.startsWith('cache_')) {
             totalItems++;
@@ -155,11 +131,8 @@ class CacheService {
           }
         }
       }
-      
-      console.log(`📊 Cache Stats: ${totalItems} elementi, ~${Math.round(totalSize/1024)}KB`);
-      return { items: totalItems, sizeKB: Math.round(totalSize/1024) };
-    } catch (error) {
-      console.error('Errore statistiche cache:', error);
+      return { items: totalItems, sizeKB: Math.round(totalSize / 1024) };
+    } catch {
       return { items: 0, sizeKB: 0 };
     }
   }
