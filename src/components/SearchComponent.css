@@ -1,8 +1,13 @@
-/* ── CONTAINER ── */
+/* ── CONTAINER ──
+   padding-top deve compensare DUE barre fisse sovrapposte: l'header
+   principale dell'app (--app-header-height) + questa stessa barra di ricerca
+   (anche lei fissa, ~68px di altezza coi suoi contenuti). Prima erano numeri
+   fissi indipendenti dall'header dell'app: bastava ridimensionare l'header
+   perché questa pagina iniziasse a sovrapporsi al contenuto. */
 .search-component {
   background: var(--bg-primary);
-  min-height: calc(100vh - 80px);
-  padding-top: 80px; /* compensa header fisso (~68px header fisso) */
+  min-height: calc(100vh - var(--app-header-height) - 68px);
+  padding-top: calc(var(--app-header-height) + 68px);
 }
 
 /* ── HEADER FISSO ── */
@@ -11,7 +16,7 @@
   border-bottom: 1px solid var(--border-color);
   padding: 14px 24px;
   position: fixed;
-  top: 68px;
+  top: var(--app-header-height);
   left: 0;
   right: 0;
   z-index: 100;

@@ -2,7 +2,7 @@
 /* ── LAYOUT ── */
 .categories-layout {
   display: flex;
-  height: calc(100vh - 68px); /* altezza fissa: esclude l'header */
+  height: calc(100vh - var(--app-header-height) - 14px); /* altezza fissa: esclude l'header (coerente con .app-main) */
   overflow: hidden;
   background: var(--bg-primary);
 }

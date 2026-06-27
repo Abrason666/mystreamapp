@@ -12,7 +12,7 @@ import { isNetworkError } from '../utils/networkUtils';
 import './MovieDetail.css';
 import storage from '../services/storage';
 import { SkeletonDetail } from './Skeleton';
-import { Play, Heart, Film, Volume2, VolumeX, User, Star, ChevronDown } from 'lucide-react';
+import { Play, Heart, Volume2, VolumeX, User, Star, ChevronDown } from 'lucide-react';
 
 import { useTrailerCycle } from '../hooks/useTrailerCycle';
 
@@ -32,6 +32,7 @@ function MovieDetail() {
   const [isFavoriteMovie, setIsFavoriteMovie] = useState(false);
   const [pulsingFav, setPulsingFav]           = useState(false);
   const [networkError, setNetworkError] = useState(false);
+  const [continueWatching, setContinueWatching] = useState(null);
   
   const [openSections, setOpenSections] = useState({ trailer: false, reviews: false, similar: false });
   const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -54,7 +55,7 @@ function MovieDetail() {
       try {
         const details = await getMovieDetails(id);
         setMovieDetails(details);
-        
+
         await Promise.all([
           loadCredits(id),
           loadVideos(id),
@@ -62,8 +63,9 @@ function MovieDetail() {
           loadRecommendations(id),
           loadReviews(id)
         ]);
-        
+
         await loadFavoriteStatus();
+        setContinueWatching(await storage.getContinueWatching(id));
       } catch (error) {
         console.error('❌ Errore caricamento film:', error);
         if (isNetworkError(error)) {
@@ -138,7 +140,10 @@ function MovieDetail() {
   };
 
   const playMovie = () => {
-    navigate(`/player/movie/${id}`);
+    // replace, non push: il player è uno stato "di passaggio" sopra questa
+    // pagina — se restasse nella cronologia, il tasto Indietro dell'app (in
+    // alto a destra) potrebbe riproporlo dopo che l'utente lo ha già chiuso
+    navigate(`/player/movie/${id}`, { replace: true });
   };
 
   const handleRetry = () => {
@@ -183,6 +188,7 @@ function MovieDetail() {
 
   const director = getDirector();
   const trailer = videos.find(v => v.type === 'Trailer');
+  const isUpcoming = !!movieDetails.release_date && new Date(movieDetails.release_date) > new Date();
 
   return (
     <div className="movie-detail">
@@ -257,10 +263,17 @@ function MovieDetail() {
                 BOTTONI AZIONI
                 ======================================== */}
             <div className="movie-actions">
-              <button className="md-btn-play" onClick={playMovie}>
-                <Play size={20} fill="currentColor" />
-                Riproduci
-              </button>
+              {isUpcoming ? (
+                <button className="md-btn-play" disabled>
+                  <Play size={20} fill="currentColor" />
+                  Non disponibile
+                </button>
+              ) : (
+                <button className="md-btn-play" onClick={playMovie}>
+                  <Play size={20} fill="currentColor" />
+                  {continueWatching?.resumeTime > 0 ? 'Continua' : 'Riproduci'}
+                </button>
+              )}
               <button
                 className={`md-btn-fav${isFavoriteMovie ? ' active' : ''}${pulsingFav ? ' heart-pulse' : ''}`}
                 onClick={toggleFavorites}

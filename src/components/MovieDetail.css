@@ -286,6 +286,17 @@
   transform: scale(1.03);
 }
 
+.md-btn-play:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.md-btn-play:disabled:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: none;
+}
+
 /* Cuore — cerchio con bordo */
 .md-btn-fav {
   width: 48px;

@@ -29,7 +29,13 @@
   --border-color: #333333;      /* Bordi sottili */
   --hover-bg: rgba(255, 107, 53, 0.1);  /* Arancione trasparente */
   --shadow-orange: rgba(255, 107, 53, 0.3);  /* Ombra arancione */
-  
+
+  /* Altezza header fisso — unica fonte di verità, riusata anche in
+     SearchComponent.css/CategoriesComponent.css per i loro offset: prima
+     erano numeri fissi duplicati in 3 file, finiti fuori sincrono quando ho
+     ridimensionato l'header (causa del bug "barra che copre i contenuti"). */
+  --app-header-height: 82px;
+
   /* 🔤 TYPOGRAPHY VARIABLES */
   --font-family-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-family-display: 'Poppins', 'Inter', system-ui, sans-serif;
@@ -96,7 +102,8 @@ body, html {
   color: var(--text-primary);
 }
 
-/* === HEADER === */
+/* === HEADER === (1.2x rispetto alle dimensioni originali — ricalcolato dai
+   valori base, non da scale precedenti, per evitare disallineamenti) */
 .app-header {
   position: fixed;
   top: 0;
@@ -109,14 +116,14 @@ body, html {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 2.5rem;
-  height: 68px;
+  padding: 0 3rem;
+  height: var(--app-header-height);
 }
 
 .app-left-group {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.8rem;
 }
 
 .app-logo-link {
@@ -126,7 +133,7 @@ body, html {
 }
 
 .app-logo {
-  width: 42px;
+  width: 50px;
   height: auto;
   object-fit: contain;
   transition: opacity 0.2s;
@@ -138,10 +145,10 @@ body, html {
 
 .app-brand-name {
   font-family: var(--font-family-display);
-  font-size: 1.4rem;
+  font-size: 1.68rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin-left: 0.5rem;
+  margin-left: 0.6rem;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -152,7 +159,7 @@ body, html {
 .app-nav {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -162,11 +169,11 @@ body, html {
   color: rgba(255,255,255,0.65);
   text-decoration: none;
   font-family: var(--font-family-primary);
-  font-size: 0.95rem;
+  font-size: 1.14rem;
   font-weight: 500;
   letter-spacing: 0.02em;
-  padding: 0.4rem 0.9rem;
-  border-radius: 4px;
+  padding: 0.48rem 1.08rem;
+  border-radius: 5px;
   position: relative;
   transition: color 0.15s, background 0.15s;
 }
@@ -174,12 +181,12 @@ body, html {
 .app-nav a::after {
   content: '';
   position: absolute;
-  bottom: -1px;
-  left: 0.9rem;
-  right: 0.9rem;
-  height: 2px;
+  bottom: -1.2px;
+  left: 1.08rem;
+  right: 1.08rem;
+  height: 2.4px;
   background: var(--accent-primary);
-  border-radius: 1px;
+  border-radius: 1.2px;
   transform: scaleX(0);
   transition: transform 0.2s ease;
 }
@@ -200,8 +207,8 @@ body, html {
 
 /* Pulsante chiusura app */
 .close-app-btn {
-  width: 34px;
-  height: 34px;
+  width: 41px;
+  height: 41px;
   border-radius: 50%;
   border: 1px solid rgba(255,255,255,0.15);
   background: transparent;
@@ -233,9 +240,9 @@ body, html {
 
 /* === MAIN CONTENT === */
 .app-main {
-  padding-top: 80px; /* Spazio per header fisso */
+  padding-top: calc(var(--app-header-height) + 14px); /* header + piccolo margine */
   width: 100%;
-  min-height: calc(100vh - 80px);
+  min-height: calc(100vh - var(--app-header-height) - 14px);
   background: var(--bg-primary);
 }
 

@@ -67,7 +67,7 @@ function App() {
             title="Chiudi applicazione"
             aria-label="Chiudi applicazione"
           >
-            <X size={18} />
+            <X size={22} />
           </button>
         </header>
 

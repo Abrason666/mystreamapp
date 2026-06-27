@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllContinueWatching: () => {
     return ipcRenderer.invoke('get-all-continue-watching');
   },
+  // 🆕 Tier 3 del resolver vixsrc: finestra nascosta + sniff di rete
+  browserSniff: (params) => {
+    return ipcRenderer.invoke('browser-sniff', params);
+  },
 
   // ── AGGIORNAMENTI ──────────────────────────────────────────────────────────
   onUpdateAvailable:    (cb) => ipcRenderer.on('update-available',         (_, info) => cb(info)),

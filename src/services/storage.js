@@ -78,36 +78,6 @@ class StorageService {
     }
   }
 
-  async getWatchedEpisodes(tmdbId) {
-    try {
-      const key = `mystream_watched_${tmdbId}`;
-      if (this.isElectron) {
-        const data = await window.electronAPI.loadData(key);
-        return data ? JSON.parse(data) : [];
-      } else {
-        const data = localStorage.getItem(key) || '[]';
-        return JSON.parse(data);
-      }
-    } catch (e) {
-      console.error('Errore caricamento watched episodes:', e);
-      return [];
-    }
-  }
-
-  async saveWatchedEpisodes(tmdbId, episodes) {
-    try {
-      const key = `mystream_watched_${tmdbId}`;
-      const data = JSON.stringify(episodes);
-      if (this.isElectron) {
-        await window.electronAPI.saveData(key, data);
-      } else {
-        localStorage.setItem(key, data);
-      }
-    } catch (e) {
-      console.error('Errore salvataggio watched episodes:', e);
-    }
-  }
-
   async getAllContinueWatching() {
     try {
       if (this.isElectron) {
@@ -129,6 +99,99 @@ class StorageService {
       }
     } catch {
       return [];
+    }
+  }
+
+  // ── Modalità player: 'native' (default) | 'embedded' (iframe classico) ──
+  async getPlayerMode() {
+    try {
+      if (this.isElectron) {
+        const data = await window.electronAPI.loadData('mystream_player_mode');
+        return data || 'native';
+      } else {
+        return localStorage.getItem('mystream_player_mode') || 'native';
+      }
+    } catch (e) {
+      return 'native';
+    }
+  }
+
+  async savePlayerMode(mode) {
+    try {
+      if (this.isElectron) {
+        await window.electronAPI.saveData('mystream_player_mode', mode);
+      } else {
+        localStorage.setItem('mystream_player_mode', mode);
+      }
+    } catch (e) {
+      console.error('Errore salvataggio modalità player:', e);
+    }
+  }
+
+  // ── Preferenze player (globali, valgono per tutti i contenuti): lingua audio/
+  // sottotitoli preferita (per label, es. "English" — gli id traccia non sono
+  // stabili tra contenuti diversi) e aspetto sottotitoli (dimensione/colore/
+  // sfondo). Senza questo si resettava tutto ad ogni apertura del player ──
+  async getPlayerPrefs() {
+    try {
+      const key = 'mystream_player_prefs';
+      let raw;
+      if (this.isElectron) {
+        raw = await window.electronAPI.loadData(key);
+      } else {
+        raw = localStorage.getItem(key);
+      }
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  async savePlayerPrefs(prefs) {
+    try {
+      const key = 'mystream_player_prefs';
+      const data = JSON.stringify(prefs);
+      if (this.isElectron) {
+        await window.electronAPI.saveData(key, data);
+      } else {
+        localStorage.setItem(key, data);
+      }
+    } catch (e) {
+      console.error('Errore salvataggio preferenze player:', e);
+    }
+  }
+
+  // ── Progresso per-episodio (serie TV): { "S1E2": { time, duration }, ... }
+  // usato per la barra di avanzamento sulla miniatura — a differenza di
+  // continueWatching (un solo puntatore all'episodio più recente), questa mappa
+  // conserva la posizione di OGNI episodio mai guardato, anche quelli passati ──
+  async getEpisodeProgress(tmdbId) {
+    try {
+      const key = `mystream_progress_${tmdbId}`;
+      if (this.isElectron) {
+        const data = await window.electronAPI.loadData(key);
+        return data ? JSON.parse(data) : {};
+      } else {
+        return JSON.parse(localStorage.getItem(key) || '{}');
+      }
+    } catch (e) {
+      return {};
+    }
+  }
+
+  async saveEpisodeProgress(tmdbId, season, episode, time, duration) {
+    try {
+      const key = `mystream_progress_${tmdbId}`;
+      const all = await this.getEpisodeProgress(tmdbId);
+      all[`S${season}E${episode}`] = { time, duration };
+      const data = JSON.stringify(all);
+      if (this.isElectron) {
+        await window.electronAPI.saveData(key, data);
+      } else {
+        localStorage.setItem(key, data);
+      }
+    } catch (e) {
+      console.error('Errore salvataggio progresso episodio:', e);
     }
   }
 

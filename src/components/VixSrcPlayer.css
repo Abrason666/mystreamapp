@@ -9,6 +9,16 @@
   overflow: hidden;
 }
 
+/* Schermata "contenuto non disponibile": a differenza della riproduzione vera
+   (immersiva, niente barra app) qui ha senso lasciare visibile la barra di
+   navigazione superiore — non c'è nessun video, l'utente potrebbe voler
+   tornare alla home o cercare altro senza passare dal tasto Indietro.
+   z-index più basso di quello (2000) che .app-header assume in modalità
+   player (vedi App.css), così la barra resta sopra invece di essere coperta. */
+.player-wrapper-notfound {
+  z-index: 500;
+}
+
 /* ── TOP BAR ── */
 .player-top-bar {
   height: 80px;
@@ -166,4 +176,57 @@
   color: #555;
   font-size: 13px;
   letter-spacing: 0.04em;
+}
+
+/* l'utente non deve restare bloccato sulla schermata di caricamento qualunque
+   sia la causa del ritardo (resolver lento, sniff di rete, ecc.) — position:
+   fixed così non dipende dall'inset di .player-loading-overlay (pensato per la
+   modalità con top-bar, qui assente) */
+.player-loading-back {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 3;
+  background: rgba(20, 20, 20, 0.7);
+}
+
+/* ── SCHERMATA "CONTENUTO NON DISPONIBILE" ── */
+.player-notfound {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.player-notfound-icon {
+  color: #ff6b35;
+  opacity: 0.85;
+}
+
+.player-notfound-title {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.player-notfound-text {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  max-width: 420px;
+  margin: 0;
+}
+
+.player-notfound-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
 }

@@ -54,7 +54,7 @@ const NavigationButtons = () => {
         disabled={!canGoBack}
         aria-label="Torna indietro"
       >
-        <ChevronLeft size={20} />
+        <ChevronLeft size={24} />
       </button>
 
       <button
@@ -63,7 +63,7 @@ const NavigationButtons = () => {
         disabled={!canGoForward}
         aria-label="Vai avanti"
       >
-        <ChevronRight size={20} />
+        <ChevronRight size={24} />
       </button>
     </div>
   );

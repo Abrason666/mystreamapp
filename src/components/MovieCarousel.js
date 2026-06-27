@@ -132,11 +132,6 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange, icon: 
     }));
   };
 
-  const isFavorite = (item) => {
-    const itemType = determineItemType(item);
-    return localFavorites.some(fav => fav.id === item.id && fav.type === itemType);
-  };
-
   return (
     <div className="movie-carousel">
       <h2 className="carousel-title">
@@ -192,11 +187,6 @@ function MovieCarousel({ title, items, type = 'movie', onFavoritesChange, icon: 
                           : 'N/A'
                         }
                       </p>
-                      {type === 'mixed' && (
-                        <p className="item-type">
-                          {itemType === 'movie' ? '🎬 Film' : '📺 Serie TV'}
-                        </p>
-                      )}
                     </div>
                     
                     <div className="item-actions">

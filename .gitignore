@@ -12,6 +12,9 @@
 /build
 /dist
 
+# certificato di firma (tenere fuori dal repo)
+/certs/*.pfx
+
 # misc
 .DS_Store
 .env

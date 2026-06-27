@@ -44,9 +44,16 @@ function saveDataToFile(key, value) {
       const fileContent = fs.readFileSync(dataFilePath, 'utf8');
       data = JSON.parse(fileContent);
     }
-    
+
     data[key] = value;
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
+    // Scrittura atomica: prima su un file temporaneo, poi rinominato sopra
+    // l'originale. fs.renameSync sullo stesso volume è atomico (anche su
+    // Windows, via MoveFileEx con replace) — se l'app crasha o viene chiusa a
+    // metà, il file originale resta intatto invece di restare troncato/corrotto
+    // (il rischio: PRIMA si scriveva direttamente sul file vero).
+    const tmpPath = `${dataFilePath}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    fs.renameSync(tmpPath, dataFilePath);
     log.info(`💾 Dati salvati: ${key}`);
   } catch (error) {
     log.error('❌ Errore salvataggio:', error);
@@ -67,6 +74,105 @@ function loadDataFromFile(key) {
 }
 
 // ========================================
+// BROWSER-SNIFF (tier 3 del resolver vixsrc)
+// ========================================
+// Se il resolver HTTP nel renderer (fetch puro su API/pagine embed) non trova
+// l'URL della playlist HLS — vixsrc ha cambiato markup — come ultima risorsa
+// PRIMA del fallback all'iframe carichiamo la pagina del player in una
+// BrowserWindow NASCOSTA e intercettiamo il traffico di rete in uscita: appena
+// passa una richiesta verso /playlist/ o un .m3u8, abbiamo l'URL, senza
+// dipendere da nessun pattern HTML/JS — funziona finché il sito riesce a
+// riprodurre qualcosa. Niente Playwright: Electron ha già Chromium integrato.
+// Validato isolatamente nel progetto di test (scraper_test) prima di portarlo
+// qui: 3/3 contenuti di prova hanno prodotto un master HLS valido.
+const VIXSRC_ROOT = 'https://vixsrc.to';
+const SNIFF_KEYWORDS = ['/playlist/', '.m3u8'];
+const SNIFF_TIMEOUT_MS = 25000;
+const SNIFF_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+// Partition NON persistente (niente prefisso "persist:"): vive solo in
+// memoria, sparisce alla chiusura dell'app, isolata dalla sessione della
+// finestra principale (niente condivisione di cookie/cache).
+const SNIFF_PARTITION = 'electron-vixsrc-sniff';
+
+function sniffPageUrls({ type, id, season, episode }) {
+  return type === 'tv'
+    ? [`${VIXSRC_ROOT}/tv/${id}/${season}/${episode}`, `${VIXSRC_ROOT}/embed/tv/${id}/${season}/${episode}`]
+    : [`${VIXSRC_ROOT}/movie/${id}`, `${VIXSRC_ROOT}/embed/movie/${id}`];
+}
+
+// Serializza i tentativi: la sessione di sniff ha UN solo listener onBeforeRequest
+// alla volta, quindi due chiamate in contemporanea si scavalcherebbero a vicenda
+// (l'ultima registrata "vince", l'altra non vedrebbe mai la sua richiesta).
+let sniffQueue = Promise.resolve();
+function browserSniffMaster(params) {
+  const run = sniffQueue.then(() => sniffOnePage(params));
+  sniffQueue = run.catch(() => {}); // la coda prosegue anche se questo tentativo fallisce
+  return run;
+}
+
+async function sniffOnePage({ type, id, season, episode }) {
+  const pageUrls = sniffPageUrls({ type, id, season, episode });
+  const ses = session.fromPartition(SNIFF_PARTITION);
+
+  const win = new BrowserWindow({
+    show: false,
+    width: 1280,
+    height: 720,
+    webPreferences: {
+      session: ses,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.setUserAgent(SNIFF_USER_AGENT);
+
+  try {
+    for (const pageUrl of pageUrls) {
+      const found = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (url) => {
+          if (settled) return;
+          settled = true;
+          ses.webRequest.onBeforeRequest(null);
+          resolve(url);
+        };
+
+        const timer = setTimeout(() => finish(null), SNIFF_TIMEOUT_MS);
+
+        ses.webRequest.onBeforeRequest((details, callback) => {
+          if (!settled && SNIFF_KEYWORDS.some((k) => details.url.includes(k))) {
+            clearTimeout(timer);
+            finish(details.url);
+          }
+          callback({}); // osserva soltanto, non blocca mai la richiesta
+        });
+
+        win.loadURL(pageUrl, { httpReferrer: `${VIXSRC_ROOT}/` }).catch(() => {});
+
+        // alcuni player partono solo con interazione: un click al centro come
+        // fallback, dato un attimo alla pagina per caricarsi prima
+        setTimeout(() => {
+          if (settled || win.isDestroyed()) return;
+          const { width, height } = win.getBounds();
+          const x = Math.round(width / 2), y = Math.round(height / 2);
+          win.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+          win.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+        }, 2500);
+      });
+
+      if (found) return found;
+    }
+    return null;
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+}
+
+// ========================================
 // CREAZIONE FINESTRA
 // ========================================
 function createWindow() {
@@ -77,6 +183,25 @@ function createWindow() {
     log.info('🚫 Pubblicità bloccata:', details.url);
     callback({ cancel: true });
   });
+
+  // 🎬 CORS per il resolver/player nativo: vixsrc non espone Access-Control-Allow-Origin
+  // su /api e /embed, quindi il fetch dal renderer verrebbe bloccato. Iniettiamo l'header
+  // sulle risposte di vixsrc (e del CDN dei segmenti) così il player nativo può risolvere
+  // e riprodurre. Stessa cosa per image.tmdb.org: cacheService.cacheImage() fa un fetch()
+  // per salvare i poster in locale, bloccato dal CORS del CDN TMDB (l'<img> funziona
+  // comunque, ma la cache resta disabilitata). Additivo: non tocca il resto (l'iframe
+  // carica vixsrc come documento, le <img> caricano TMDB normalmente).
+  ses.webRequest.onHeadersReceived(
+    { urls: ['*://vixsrc.to/*', '*://*.vixsrc.to/*', '*://*.vix-content.net/*', '*://image.tmdb.org/*'] },
+    (details, callback) => {
+      const headers = details.responseHeaders || {};
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === 'access-control-allow-origin') delete headers[k];
+      }
+      headers['Access-Control-Allow-Origin'] = ['*'];
+      callback({ responseHeaders: headers });
+    }
+  );
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -162,6 +287,18 @@ function createWindow() {
   ipcMain.handle('close-app', async () => {
     log.info('🚪 Chiusura app richiesta');
     app.quit();
+  });
+
+  // 🆕 Tier 3 del resolver vixsrc — vedi commento sopra a sniffOnePage()
+  ipcMain.handle('browser-sniff', async (event, params) => {
+    try {
+      const url = await browserSniffMaster(params || {});
+      log.info(url ? `🔎 browser-sniff: trovato ${url}` : '🔎 browser-sniff: nessun URL intercettato');
+      return { url };
+    } catch (error) {
+      log.error('❌ Errore browser-sniff:', error);
+      return { url: null, error: error.message };
+    }
   });
 
   // 🆕 GESTORI IPC PER NAVIGAZIONE AVANTI/INDIETRO

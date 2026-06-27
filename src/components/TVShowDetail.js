@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getTVSeasons, getSeasonEpisodes, getBackdropUrl, getEpisodeImageUrl, getTVCredits, getTVRecommendations } from '../services/tmdbApi';
 import { useTrailerCycle } from '../hooks/useTrailerCycle';
@@ -7,7 +7,7 @@ import MovieCarousel from './MovieCarousel';
 import './TVShowDetail.css';
 import storage from '../services/storage';
 import { SkeletonDetail } from './Skeleton';
-import { Play, SkipForward, RefreshCw, Heart, List, Info, Film, Eye, Check, Star, User, Volume2, VolumeX, ChevronDown } from 'lucide-react';
+import { Play, SkipForward, RefreshCw, Heart, List, Info, Star, User, Volume2, VolumeX, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 
 function TVShowDetail({ initialSeason }) {
@@ -23,13 +23,18 @@ function TVShowDetail({ initialSeason }) {
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading]               = useState(true);
   const [episodesLoading, setEpisodesLoading] = useState(false);
-  const [watchedEpisodes, setWatchedEpisodes] = useState([]);
+  const [episodeProgress, setEpisodeProgress] = useState({});
   const [continueWatching, setContinueWatching] = useState(null);
   const [isFavoriteShow, setIsFavoriteShow] = useState(false);
   const [pulsingFav, setPulsingFav]         = useState(false);
   
-  // 🆕 NUOVO STATO: Episodio successivo
   const [nextEpisode, setNextEpisode] = useState(null);
+
+  // Scroll stagioni
+  const seasonScrollRef                       = useRef(null);
+  const initialScrollDone                     = useRef(false);
+  const [canScrollSeasonsLeft,  setCanScrollSeasonsLeft]  = useState(false);
+  const [canScrollSeasonsRight, setCanScrollSeasonsRight] = useState(false);
   
   // 🆕 NUOVI STATI PER TAB
   const [activeTab, setActiveTab] = useState('episodes');
@@ -43,7 +48,13 @@ function TVShowDetail({ initialSeason }) {
   useEffect(() => {
     setActiveTab('episodes');
     setOpenSections({ similar: false });
+    initialScrollDone.current = false;
   }, [id]);
+
+  // Quando si torna alla tab episodi, permetti il riposizionamento
+  useEffect(() => {
+    if (activeTab === 'episodes') initialScrollDone.current = false;
+  }, [activeTab]);
 
   const loadFavoriteStatus = useCallback(async () => {
     const favorites = await storage.getFavorites();
@@ -68,12 +79,12 @@ function TVShowDetail({ initialSeason }) {
       setSeasons(validSeasons);
 
       // 2. Carica continue watching PRIMA di scegliere la stagione
-      const [continueData, watched] = await Promise.all([
+      const [continueData, progress] = await Promise.all([
         storage.getContinueWatching(id),
-        storage.getWatchedEpisodes(id),
+        storage.getEpisodeProgress(id),
       ]);
       setContinueWatching(continueData);
-      setWatchedEpisodes(watched || []);
+      setEpisodeProgress(progress || {});
 
       // 3. Determina quale stagione aprire:
       //    initialSeason (URL) → query param → stagione del continue watching → 1
@@ -167,6 +178,91 @@ function TVShowDetail({ initialSeason }) {
     }
   }, [continueWatching, seasons, calculateNextEpisode]);
 
+  // Drag scroll stagioni
+  const dragRef = useRef({ active: false, startX: 0, scrollLeft: 0 });
+
+  const onSeasonMouseDown = (e) => {
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    dragRef.current = { active: true, startX: e.pageX, scrollLeft: el.scrollLeft };
+    el.style.cursor = 'grabbing';
+    el.style.userSelect = 'none';
+  };
+
+  const onSeasonMouseMove = (e) => {
+    if (!dragRef.current.active) return;
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    const dx = e.pageX - dragRef.current.startX;
+    el.scrollLeft = dragRef.current.scrollLeft - dx;
+  };
+
+  const onSeasonMouseUp = () => {
+    dragRef.current.active = false;
+    const el = seasonScrollRef.current;
+    if (el) { el.style.cursor = 'grab'; el.style.userSelect = ''; }
+  };
+
+  // Scroll stagioni — aggiorna frecce
+  const checkSeasonScroll = useCallback(() => {
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    setCanScrollSeasonsLeft(el.scrollLeft > 4);
+    setCanScrollSeasonsRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  // max-width + posizionamento iniziale stagione attiva
+  useLayoutEffect(() => {
+    if (loading || activeTab !== 'episodes') return;
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    if (seasons.length <= 10) { el.style.maxWidth = ''; return; }
+
+    const pills = el.querySelectorAll('.season-pill');
+    if (pills.length < 10) return;
+
+    el.style.maxWidth = `${pills[9].offsetLeft + pills[9].offsetWidth}px`;
+
+    // Posiziona la stagione attiva come ultima visibile
+    if (!initialScrollDone.current) {
+      initialScrollDone.current = true;
+      const active = el.querySelector('.season-pill.active');
+      if (active) {
+        const target = active.offsetLeft + active.offsetWidth - el.clientWidth;
+        if (target > 0) el.scrollLeft = target;
+      }
+    }
+  }, [seasons, loading, activeTab]);
+
+  // Frecce iniziali + listener scroll
+  useEffect(() => {
+    if (loading || activeTab !== 'episodes' || seasons.length <= 10) return;
+    setCanScrollSeasonsLeft(false);
+    setCanScrollSeasonsRight(true);
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', checkSeasonScroll, { passive: true });
+    return () => el.removeEventListener('scroll', checkSeasonScroll);
+  }, [seasons, loading, activeTab, checkSeasonScroll]);
+
+  // Quando cambia stagione, porta la pill attiva in vista
+  useEffect(() => {
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    const active = el.querySelector('.season-pill.active');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [selectedSeason]);
+
+  const scrollSeasons = (dir) => {
+    const el = seasonScrollRef.current;
+    if (!el) return;
+    const pills = el.querySelectorAll('.season-pill');
+    if (pills.length < 3) return;
+    // offsetLeft: distanza reale nel layout, non arrotondata, non dipende dal viewport
+    const step = pills[2].offsetLeft - pills[0].offsetLeft;
+    el.scrollBy({ left: dir * step, behavior: 'smooth' });
+  };
+
   // 🆕 CARICA CAST E CREW
   const loadCredits = async (tvId) => {
     const data = await getTVCredits(tvId);
@@ -225,63 +321,32 @@ function TVShowDetail({ initialSeason }) {
     setEpisodesLoading(false);
   };
 
+  // Naviga al player senza scrivere nulla in "continua a guardare": lo farà
+  // VixSrcPlayer stesso, e SOLO dopo aver confermato che l'episodio esiste
+  // davvero su vixsrc — altrimenti un episodio non disponibile finirebbe
+  // comunque in "continua a guardare" prima ancora di scoprire che non c'è.
+  // replace, non push: il player è uno stato "di passaggio" sopra questa
+  // pagina — se restasse nella cronologia, il tasto Indietro dell'app (in
+  // alto a destra) potrebbe riproporlo dopo che l'utente lo ha già chiuso.
   const playEpisode = (episode) => {
-    // Salva come "continua a guardare" con TITOLO VERO
-    const continueData = {
-      seasonNumber: selectedSeason,
-      episodeNumber: episode.episode_number,
-      episodeTitle: episode.name, // 🆕 TITOLO VERO!
-      timestamp: Date.now()
-    };
-    storage.saveContinueWatching(id, continueData);
-    
-    // Naviga al player
-    navigate(`/player/tv/${id}/${selectedSeason}/${episode.episode_number}`);
+    navigate(`/player/tv/${id}/${selectedSeason}/${episode.episode_number}`, { replace: true });
   };
 
   // 🆕 FUNZIONE: Riproduci dall'inizio (S1E1)
-  const playFromBeginning = async () => {
+  const playFromBeginning = () => {
     const firstSeason = seasons.find(s => s.season_number === 1) || seasons[0];
-    const seasonNumber = firstSeason.season_number;
-    
-    
-    // Carica episodi della prima stagione per ottenere titolo vero
-    try {
-      const firstSeasonEpisodes = await getSeasonEpisodes(id, seasonNumber);
-      const firstEpisode = firstSeasonEpisodes[0];
-      
-      const continueData = {
-        seasonNumber: seasonNumber,
-        episodeNumber: 1,
-        episodeTitle: firstEpisode.name, // 🆕 TITOLO VERO!
-        timestamp: Date.now()
-      };
-      storage.saveContinueWatching(id, continueData);
-      
-      navigate(`/player/tv/${id}/${seasonNumber}/1`);
-    } catch (error) {
-      console.error('❌ Errore caricamento primo episodio:', error);
-      // Fallback: usa titolo generico
-      const continueData = {
-        seasonNumber: seasonNumber,
-        episodeNumber: 1,
-        episodeTitle: 'Episodio 1',
-        timestamp: Date.now()
-      };
-      storage.saveContinueWatching(id, continueData);
-      navigate(`/player/tv/${id}/${seasonNumber}/1`);
-    }
+    navigate(`/player/tv/${id}/${firstSeason.season_number}/1`, { replace: true });
   };
 
   // 🆕 FUNZIONE: Continua a guardare
   const handleContinueWatching = () => {
-    navigate(`/player/tv/${id}/${continueWatching.seasonNumber}/${continueWatching.episodeNumber}`);
+    navigate(`/player/tv/${id}/${continueWatching.seasonNumber}/${continueWatching.episodeNumber}`, { replace: true });
   };
 
   // 🆕 FUNZIONE: Riproduci episodio successivo
   const handlePlayNextEpisode = () => {
     if (nextEpisode && nextEpisode.exists) {
-      navigate(`/player/tv/${id}/${nextEpisode.seasonNumber}/${nextEpisode.episodeNumber}`);
+      navigate(`/player/tv/${id}/${nextEpisode.seasonNumber}/${nextEpisode.episodeNumber}`, { replace: true });
     }
   };
 
@@ -290,76 +355,15 @@ function TVShowDetail({ initialSeason }) {
     playFromBeginning();
   };
 
-  // Avanza continueWatching all'episodio successivo (o lo azzera se è l'ultimo)
-  const advanceContinueWatching = useCallback(async (seasonNum, episodeNum) => {
-    const nextEpNum = episodeNum + 1;
-    const nextInSeason = episodes.find(e => e.episode_number === nextEpNum);
-
-    if (nextInSeason) {
-      const newCont = {
-        seasonNumber: seasonNum, episodeNumber: nextEpNum,
-        episodeTitle: nextInSeason.name, timestamp: Date.now(), watchTime: 0,
-      };
-      await storage.saveContinueWatching(id, newCont);
-      setContinueWatching(newCont);
-    } else {
-      // Ultimo episodio della stagione corrente — azzera
-      await storage.saveContinueWatching(id, null);
-      setContinueWatching(null);
-    }
-  }, [id, episodes]);
-
-  const markAsWatched = async (episode, e) => {
-    e.stopPropagation();
-    const episodeKey    = `S${selectedSeason}E${episode.episode_number}`;
-    const currentWatched = [...watchedEpisodes];
-
-    if (currentWatched.includes(episodeKey)) {
-      // Deselect
-      const updated = currentWatched.filter(ep => ep !== episodeKey);
-      setWatchedEpisodes(updated);
-      await storage.saveWatchedEpisodes(id, updated);
-    } else {
-      // Marca come visto
-      const updated = [...currentWatched, episodeKey];
-      setWatchedEpisodes(updated);
-      await storage.saveWatchedEpisodes(id, updated);
-
-      // Sincronizza continueWatching se puntava a questo episodio
-      if (continueWatching?.seasonNumber === selectedSeason &&
-          continueWatching?.episodeNumber === episode.episode_number) {
-        await advanceContinueWatching(selectedSeason, episode.episode_number);
-      }
-    }
-  };
-
-  // Marca/deseleziona tutti gli episodi della stagione corrente
-  const markSeasonAsWatched = async () => {
-    const seasonKeys  = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
-    const allWatched  = seasonKeys.every(k => watchedEpisodes.includes(k));
-    const existing    = await storage.getWatchedEpisodes(id) || [];
-
-    let updated;
-    if (allWatched) {
-      // Togli la spunta a tutti gli episodi della stagione
-      updated = existing.filter(k => !seasonKeys.includes(k));
-    } else {
-      // Marca tutti come visti
-      updated = [...new Set([...existing, ...seasonKeys])];
-      // Se continueWatching era in questa stagione, azzera
-      if (continueWatching?.seasonNumber === selectedSeason) {
-        await storage.saveContinueWatching(id, null);
-        setContinueWatching(null);
-      }
-    }
-
-    await storage.saveWatchedEpisodes(id, updated);
-    setWatchedEpisodes(updated);
-  };
-
-  const isEpisodeWatched = (episode) => {
+  // Percentuale vista di un episodio (0-1) — unica segnalazione di quanto è stato
+  // visto, vale per QUALSIASI episodio con progresso salvato (non solo quello
+  // "corrente" di continueWatching), così resta visibile anche su episodi passati.
+  // Non esiste più uno stato "visto" binario: niente spunta, niente grigio.
+  const getEpisodeProgressPct = (episode) => {
     const episodeKey = `S${selectedSeason}E${episode.episode_number}`;
-    return watchedEpisodes.includes(episodeKey);
+    const p = episodeProgress[episodeKey];
+    if (!p || !p.duration) return 0;
+    return Math.min(1, p.time / p.duration);
   };
 
   // 🆕 HELPER: Verifica se una stagione è nuova (uscita negli ultimi 90 giorni)
@@ -496,7 +500,12 @@ function TVShowDetail({ initialSeason }) {
             <div className="tv-actions">
 
               {/* Bottone principale — arancione */}
-              {!continueWatching ? (
+              {isUpcomingSeason(showDetails.first_air_date) ? (
+                <button className="tv-btn-play" disabled>
+                  <Play size={20} fill="currentColor" />
+                  Non disponibile
+                </button>
+              ) : !continueWatching ? (
                 <button className="tv-btn-play" onClick={playFromBeginning}>
                   <Play size={20} fill="currentColor" />
                   Riproduci
@@ -566,25 +575,44 @@ function TVShowDetail({ initialSeason }) {
         {activeTab === 'episodes' && (
           <div className="tab-panel tab-episodes">
             
-            {/* SELEZIONE STAGIONI — pill orizzontali */}
+            {/* SELEZIONE STAGIONI — pill orizzontali con frecce se > 10 */}
             <div className="season-pills-bar">
-              <div className="season-pills-scroll">
-                {seasons.map(season => {
-                  const isActive   = selectedSeason === season.season_number;
-                  const isNew      = isNewSeason(season.air_date);
-                  const isUpcoming = isUpcomingSeason(season.air_date);
-                  return (
-                    <button
-                      key={season.season_number}
-                      className={`season-pill ${isActive ? 'active' : ''}`}
-                      onClick={() => handleSeasonChange(season.season_number)}
-                    >
-                      Stagione {season.season_number}
-                      {isNew      && <span className="season-pill-dot season-dot-new" />}
-                      {isUpcoming && <span className="season-pill-dot season-dot-upcoming" />}
-                    </button>
-                  );
-                })}
+              <div className="season-pills-wrapper">
+                {canScrollSeasonsLeft && (
+                  <button className="season-arrow left" onClick={() => scrollSeasons(-1)} aria-label="Stagioni precedenti">
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                <div
+                  className="season-pills-scroll"
+                  ref={seasonScrollRef}
+                  onMouseDown={onSeasonMouseDown}
+                  onMouseMove={onSeasonMouseMove}
+                  onMouseUp={onSeasonMouseUp}
+                  onMouseLeave={onSeasonMouseUp}
+                >
+                  {seasons.map(season => {
+                    const isActive   = selectedSeason === season.season_number;
+                    const isNew      = isNewSeason(season.air_date);
+                    const isUpcoming = isUpcomingSeason(season.air_date);
+                    return (
+                      <button
+                        key={season.season_number}
+                        className={`season-pill ${isActive ? 'active' : ''}`}
+                        onClick={() => handleSeasonChange(season.season_number)}
+                      >
+                        Stagione {season.season_number}
+                        {isNew      && <span className="season-pill-dot season-dot-new" />}
+                        {isUpcoming && <span className="season-pill-dot season-dot-upcoming" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {canScrollSeasonsRight && (
+                  <button className="season-arrow right" onClick={() => scrollSeasons(1)} aria-label="Stagioni successive">
+                    <ChevronRight size={18} />
+                  </button>
+                )}
               </div>
               {seasons.find(s => s.season_number === selectedSeason) && (
                 <div className="season-meta-row">
@@ -600,16 +628,6 @@ function TVShowDetail({ initialSeason }) {
                       <span className="season-meta-badge upcoming">In arrivo</span>
                     )}
                   </p>
-                  {episodes.length > 0 && (() => {
-                    const seasonKeys  = episodes.map(ep => `S${selectedSeason}E${ep.episode_number}`);
-                    const allWatched  = seasonKeys.every(k => watchedEpisodes.includes(k));
-                    return (
-                      <button className={`mark-season-btn${allWatched ? ' active' : ''}`} onClick={markSeasonAsWatched}>
-                        <Check size={12} />
-                        {allWatched ? 'Togli spunta a tutti' : 'Segna tutti come visti'}
-                      </button>
-                    );
-                  })()}
                 </div>
               )}
             </div>
@@ -622,12 +640,12 @@ function TVShowDetail({ initialSeason }) {
             )}
             <div className={`episodes-list${episodesLoading ? ' episodes-list-loading' : ''}`}>
               {episodes.map(episode => {
-                const watched  = isEpisodeWatched(episode);
                 const current  = isContinuingEpisode(episode);
+                const progressPct = getEpisodeProgressPct(episode);
                 return (
                   <div
                     key={episode.id}
-                    className={`episode-row${watched ? ' is-watched' : ''}${current ? ' is-current' : ''}`}
+                    className={`episode-row${current ? ' is-current' : ''}`}
                     onClick={() => playEpisode(episode)}
                   >
                     {/* Thumbnail */}
@@ -644,13 +662,13 @@ function TVShowDetail({ initialSeason }) {
                           <Play size={22} fill="currentColor" />
                         </div>
                       </div>
-                      {watched && (
-                        <div className="ep-watched-badge">
-                          <Check size={11} strokeWidth={3} />
-                        </div>
-                      )}
-                      {current && !watched && (
-                        <div className="ep-continue-bar" />
+                      {progressPct > 0 && (
+                        <>
+                          <div className="ep-progress-shelf" />
+                          <div className="ep-progress-track">
+                            <div className="ep-progress-fill" style={{ width: `${progressPct * 100}%` }} />
+                          </div>
+                        </>
                       )}
                     </div>
 
@@ -664,19 +682,13 @@ function TVShowDetail({ initialSeason }) {
                       {episode.overview && (
                         <p className="ep-overview">{episode.overview}</p>
                       )}
-                      <div className="ep-actions" onClick={e => e.stopPropagation()}>
-                        <button
-                          className={`ep-watched-btn${watched ? ' active' : ''}`}
-                          onClick={e => markAsWatched(episode, e)}
-                        >
-                          {watched ? <><Check size={13} /> Visto</> : <><Eye size={13} /> Segna come visto</>}
-                        </button>
-                        {current && (
+                      {current && (
+                        <div className="ep-actions" onClick={e => e.stopPropagation()}>
                           <span className="ep-in-progress">
                             <Play size={10} fill="currentColor" /> In corso
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

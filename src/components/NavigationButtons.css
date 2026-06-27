@@ -1,12 +1,12 @@
 .navigation-buttons {
   display: flex;
-  gap: 6px;
+  gap: 7.2px;
   align-items: center;
 }
 
 .nav-btn {
-  width: 36px;
-  height: 36px;
+  width: 43.2px;
+  height: 43.2px;
   border-radius: 50%;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
